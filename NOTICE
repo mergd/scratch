@@ -1,0 +1,11 @@
+This repository includes a modified fork of Agentation
+(https://github.com/benjitaylor/agentation), originally by Benji Taylor.
+
+Upstream source lives under src/toolbar/ and remains subject to the
+PolyForm Shield License 1.0.0 (see UPSTREAM_LICENSE).
+
+Copyright (c) 2026 Benji Taylor
+
+The unlock wrapper and packaging in this repository are otherwise
+licensed as MIT (see LICENSE), except where the PolyForm Shield terms
+apply to the forked toolbar code and derivatives.

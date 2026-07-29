@@ -1,11 +1,13 @@
 # @fldr/agentation
 
-Prod unlock for [Agentation](https://www.npmjs.com/package/agentation) — always on in development, hidden in production until the user draws **three circles** with the cursor or presses **Cmd/Ctrl+Shift+U**.
+User feedback toolbar for apps — mark what's confusing. Always on in development; in production, unlock by drawing **three circles** or pressing **Cmd/Ctrl+Shift+U**.
+
+Forked from [Agentation](https://github.com/benjitaylor/agentation) (see `NOTICE` / `UPSTREAM_LICENSE`). Dom context is still captured for developers and coding agents.
 
 ## Install
 
 ```bash
-npm i @fldr/agentation agentation
+npm i @fldr/agentation
 ```
 
 ## Usage
@@ -20,6 +22,15 @@ import { AgentationFeedback } from '@fldr/agentation';
 <AgentationFeedback isDevelopment={process.env.NODE_ENV === 'development'} />
 ```
 
-All [Agentation props](https://www.npmjs.com/package/agentation) (`onSubmit`, `copyToClipboard`, etc.) are forwarded.
+Props like `onSubmit`, `copyToClipboard`, `webhookUrl`, etc. are forwarded to the toolbar.
 
-Also exported: `useCircleGesture` if you want the gesture without the toolbar wrapper.
+Also exported: `Agentation` (always-visible toolbar) and `useCircleGesture`.
+
+## Playground
+
+```bash
+bun install
+bun run demo
+```
+
+Opens a local page for trying circle / keyboard unlock and annotations.

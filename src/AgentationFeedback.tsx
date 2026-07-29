@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ComponentProps } from 'react';
-import { Agentation } from 'agentation';
+import { Agentation } from './toolbar';
 import { useCircleGesture } from './use-circle-gesture';
 
 export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
@@ -11,7 +11,7 @@ export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
 };
 
 /**
- * Agentation feedback toolbar. Always-on when `isDevelopment` is true;
+ * Feedback toolbar. Always-on when `isDevelopment` is true;
  * otherwise hidden until the user draws three circles with their cursor
  * or presses Cmd/Ctrl+Shift+U.
  */
