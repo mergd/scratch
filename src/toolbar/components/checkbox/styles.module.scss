@@ -15,7 +15,7 @@
     background-color: #252525;
   }
 
-  &:has(.checkboxInput:checked) {
+  &[data-checked] {
     background-color: #1a1a1a;
 
     [data-agentation-theme="dark"] & {
@@ -51,7 +51,7 @@
     color: #1a1a1a;
   }
 
-  .checkboxContainer:has(.checkboxInput:checked) & {
+  .checkboxContainer[data-checked] & {
     transition-duration: 0.2s;
     stroke-dashoffset: 0;
   }

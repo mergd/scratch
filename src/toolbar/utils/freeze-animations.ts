@@ -14,6 +14,7 @@
 // Exclude selectors — agentation UI elements should never be frozen
 const EXCLUDE_ATTRS = [
   "data-feedback-toolbar",
+  "data-feedback-guide",
   "data-annotation-popup",
   "data-annotation-marker",
 ];

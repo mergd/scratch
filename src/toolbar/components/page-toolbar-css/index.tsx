@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -9,7 +14,6 @@ import {
 } from "../annotation-popup-css";
 import {
   IconListSparkle,
-  IconGear,
   IconCopyAnimated,
   IconSendArrow,
   IconTrashAlt,
@@ -17,18 +21,7 @@ import {
   IconPausePlayAnimated,
   IconXmarkLarge,
   IconEdit,
-  IconChevronLeft,
-  IconChevronRight,
-  IconLayout,
 } from "../icons";
-import { HelpTooltip } from "../help-tooltip";
-import { DesignMode } from "../design-mode";
-import { DesignPalette } from "../design-mode/palette";
-import designStyles from "../design-mode/styles.module.scss";
-import { RearrangeOverlay } from "../design-mode/rearrange";
-import { generateDesignOutput, generateRearrangeOutput } from "../design-mode/output";
-import { detectPageSections } from "../design-mode/section-detection";
-import { DEFAULT_SIZES, type DesignPlacement, type ComponentType as DesignComponentType, type RearrangeState } from "../design-mode/types";
 import {
   identifyElement,
   getNearbyText,
@@ -50,17 +43,7 @@ import {
   saveSessionId,
   clearSessionId,
   saveAnnotationsWithSyncMarker,
-  loadDesignPlacements,
-  saveDesignPlacements,
-  clearDesignPlacements,
-  loadRearrangeState,
-  saveRearrangeState,
-  clearRearrangeState,
-  loadWireframeState,
-  saveWireframeState,
-  clearWireframeState,
   loadToolbarHidden,
-  saveToolbarHidden,
 } from "../../utils/storage";
 import {
   createSession,
@@ -80,14 +63,43 @@ import {
   unfreeze as unfreezeAll,
   originalSetTimeout,
   originalSetInterval,
-  originalRequestAnimationFrame,
 } from "../../utils/freeze-animations";
 
 import type { Annotation } from "../../types";
-import styles from "./styles.module.scss";
 import { generateOutput } from "../../utils/generate-output";
-import { AnnotationMarker, ExitingMarker, PendingMarker } from "./annotation-marker";
-import { SettingsPanel } from "./settings-panel";
+import {
+  AnnotationMarker,
+  ExitingMarker,
+  PendingMarker,
+} from "./annotation-marker";
+import {
+  MailPreview,
+  buildFeedbackMailPayload,
+  buildFeedbackMailtoHref,
+  type FeedbackMailPayload,
+} from "./mail-preview";
+import { ClearConfirmPopover } from "./clear-confirm-popover";
+
+export type { FeedbackMailPayload };
+import { ShadowRoot } from "../shadow-root";
+
+import { css as resetCss } from "../reset.scss";
+import styles, { css as toolbarCss } from "./styles.module.scss";
+import { css as popupCss } from "../annotation-popup-css/styles.module.scss";
+import { css as helpTooltipCss } from "../help-tooltip/styles.module.scss";
+import { css as iconTransitionsCss } from "../icon-transitions.module.scss";
+import { css as annotationMarkerCss } from "./annotation-marker/styles.module.scss";
+import { css as mailPreviewCss } from "./mail-preview/styles.module.scss";
+
+const shadowCss = [
+  resetCss,
+  toolbarCss,
+  popupCss,
+  helpTooltipCss,
+  iconTransitionsCss,
+  annotationMarkerCss,
+  mailPreviewCss,
+].join("\n");
 
 /**
  * Composes element identification with React component detection.
@@ -139,7 +151,11 @@ type HoverInfo = {
   reactComponents?: string | null;
 };
 
-export type OutputDetailLevel = "compact" | "standard" | "detailed" | "forensic";
+export type OutputDetailLevel =
+  | "compact"
+  | "standard"
+  | "detailed"
+  | "forensic";
 // ReactComponentMode is now derived from outputDetail when reactEnabled is true
 export type ReactComponentMode = "smart" | "filtered" | "all" | "off";
 type MarkerClickBehavior = "edit" | "delete";
@@ -163,7 +179,7 @@ const DEFAULT_SETTINGS: ToolbarSettings = {
   reactEnabled: true,
   markerClickBehavior: "edit",
   webhookUrl: "",
-  webhooksEnabled: true,
+  webhooksEnabled: false,
 };
 
 // Simple URL validation - checks for valid http(s) URL format
@@ -177,6 +193,25 @@ const isValidUrl = (url: string): boolean => {
   }
 };
 
+/** Absolute http(s) or same-origin relative path (e.g. `/api/feedback`). */
+const isHttpDestination = (url: string | undefined): boolean => {
+  if (!url || !url.trim()) return false;
+  const trimmed = url.trim();
+  if (trimmed.startsWith("/")) return true;
+  return isValidUrl(trimmed);
+};
+
+/** Prop wins when set; otherwise use toolbar settings (incl. localStorage). */
+const resolveWebhookUrl = (
+  webhookUrl: string | undefined,
+  settingsWebhookUrl: string,
+): string => {
+  if (webhookUrl !== undefined) {
+    return webhookUrl.trim();
+  }
+  return settingsWebhookUrl.trim();
+};
+
 // Maps output detail level to React detection mode
 const OUTPUT_TO_REACT_MODE: Record<OutputDetailLevel, ReactComponentMode> = {
   compact: "off",
@@ -186,45 +221,74 @@ const OUTPUT_TO_REACT_MODE: Record<OutputDetailLevel, ReactComponentMode> = {
 };
 
 export const COLOR_OPTIONS = [
-  { id: "indigo",  label: "Indigo",  srgb: "#6155F5", p3: "color(display-p3 0.38 0.33 0.96)" },
-  { id: "blue",    label: "Blue",    srgb: "#0088FF", p3: "color(display-p3 0.00 0.53 1.00)" },
-  { id: "cyan",    label: "Cyan",    srgb: "#00C3D0", p3: "color(display-p3 0.00 0.76 0.82)" },
-  { id: "green",   label: "Green",   srgb: "#34C759", p3: "color(display-p3 0.20 0.78 0.35)" },
-  { id: "yellow",  label: "Yellow",  srgb: "#FFCC00", p3: "color(display-p3 1.00 0.80 0.00)" },
-  { id: "orange",  label: "Orange",  srgb: "#FF8D28", p3: "color(display-p3 1.00 0.55 0.16)" },
-  { id: "red",     label: "Red",     srgb: "#FF383C", p3: "color(display-p3 1.00 0.22 0.24)" },
-];
+  {
+    id: "indigo",
+    label: "Indigo",
+    srgb: "#6155F5",
+    p3: "color(display-p3 0.38 0.33 0.96)",
+  },
+  {
+    id: "blue",
+    label: "Blue",
+    srgb: "#0088FF",
+    p3: "color(display-p3 0.00 0.53 1.00)",
+  },
+  {
+    id: "cyan",
+    label: "Cyan",
+    srgb: "#00C3D0",
+    p3: "color(display-p3 0.00 0.76 0.82)",
+  },
+  {
+    id: "green",
+    label: "Green",
+    srgb: "#34C759",
+    p3: "color(display-p3 0.20 0.78 0.35)",
+  },
+  {
+    id: "yellow",
+    label: "Yellow",
+    srgb: "#FFCC00",
+    p3: "color(display-p3 1.00 0.80 0.00)",
+  },
+  {
+    id: "orange",
+    label: "Orange",
+    srgb: "#FF8D28",
+    p3: "color(display-p3 1.00 0.55 0.16)",
+  },
+  {
+    id: "red",
+    label: "Red",
+    srgb: "#FF383C",
+    p3: "color(display-p3 1.00 0.22 0.24)",
+  },
+] as const;
 
-const injectAgentationColorTokens = () => {
-  if (typeof document === "undefined") return;
-  if (document.getElementById("agentation-color-tokens")) return;
-  const style = document.createElement("style");
-  style.id = "agentation-color-tokens";
-  style.textContent = [
-    ...COLOR_OPTIONS.map(c => `
+export type AnnotationColorId = (typeof COLOR_OPTIONS)[number]["id"];
+
+const agentationColorTokensCss = [
+  ...COLOR_OPTIONS.map(
+    (c) => `
+    [data-agentation-accent="${c.id}"] {
+      --agentation-color-accent: ${c.srgb};
+    }
+    @supports (color: color(display-p3 0 0 0)) {
       [data-agentation-accent="${c.id}"] {
-        --agentation-color-accent: ${c.srgb};
+        --agentation-color-accent: ${c.p3};
       }
-
-      @supports (color: color(display-p3 0 0 0)) {
-        [data-agentation-accent="${c.id}"] {
-          --agentation-color-accent: ${c.p3};
-        }
-      }
-    `),
-    `:root {
-      ${COLOR_OPTIONS.map(c => `--agentation-color-${c.id}: ${c.srgb};`).join("\n")}
-    }`,
-    `@supports (color: color(display-p3 0 0 0)) {
-      :root {
-        ${COLOR_OPTIONS.map(c => `--agentation-color-${c.id}: ${c.p3};`).join("\n")}
-      }
-    }`,
-  ].join("");
-  document.head.appendChild(style);
-}
-
-injectAgentationColorTokens();
+    }
+  `,
+  ),
+  `:host {
+    ${COLOR_OPTIONS.map((c) => `--agentation-color-${c.id}: ${c.srgb};`).join("\n")}
+  }`,
+  `@supports (color: color(display-p3 0 0 0)) {
+    :host {
+      ${COLOR_OPTIONS.map((c) => `--agentation-color-${c.id}: ${c.p3};`).join("\n")}
+    }
+  }`,
+].join("");
 
 // =============================================================================
 // Utils
@@ -241,7 +305,10 @@ function deepElementFromPoint(x: number, y: number): HTMLElement | null {
 
   // Keep drilling down through shadow roots
   while (element?.shadowRoot) {
-    const deeper = element.shadowRoot.elementFromPoint(x, y) as HTMLElement | null;
+    const deeper = element.shadowRoot.elementFromPoint(
+      x,
+      y,
+    ) as HTMLElement | null;
     if (!deeper || deeper === element) break;
     element = deeper;
   }
@@ -268,7 +335,9 @@ function isRenderableAnnotation(annotation: Annotation): boolean {
 
 function detectSourceFile(element: Element): string | undefined {
   const result = getSourceLocation(element as HTMLElement);
-  const loc = result.found ? result : findNearestComponentSource(element as HTMLElement);
+  const loc = result.found
+    ? result
+    : findNearestComponentSource(element as HTMLElement);
   if (loc.found && loc.source) {
     return formatSourceLocation(loc.source, "path");
   }
@@ -301,6 +370,8 @@ export type PageFeedbackToolbarCSSProps = {
   onCopy?: (markdown: string) => void;
   /** Callback fired when "Send to Agent" is clicked. Receives the markdown output and annotations. */
   onSubmit?: (output: string, annotations: Annotation[]) => void;
+  /** Show the copy button in the toolbar. Defaults to true. */
+  enableCopy?: boolean;
   /** Whether to copy to clipboard when the copy button is clicked. Defaults to true. */
   copyToClipboard?: boolean;
   /** Server URL for sync (e.g., "http://localhost:4747"). If not provided, uses localStorage only. */
@@ -309,10 +380,46 @@ export type PageFeedbackToolbarCSSProps = {
   sessionId?: string;
   /** Called when a new session is created (only when endpoint is provided without sessionId). */
   onSessionCreated?: (sessionId: string) => void;
-  /** Webhook URL to receive annotation events. */
+  /** Webhook URL to receive annotation events (also used as a mail-confirm HTTP destination). */
   webhookUrl?: string;
+  /**
+   * POST destination for mail-back confirm. Receives FeedbackMailPayload JSON
+   * (full page URL, context, annotations, markdown). Independent of webhookUrl.
+   */
+  feedbackUrl?: string;
+  /**
+   * Open a mailto: link on mail-back confirm. `true` = empty recipient;
+   * string = email address.
+   */
+  mailto?: string | boolean;
+  /**
+   * Developer-supplied identifying info (user id, email, plan, etc.) merged into
+   * the outbound FeedbackMailPayload as `context`.
+   */
+  feedbackContext?: Record<string, unknown>;
+  /**
+   * Show the mail-back UI. Defaults to true when any of feedbackUrl / webhookUrl /
+   * mailto is set; set explicitly to force show/hide.
+   */
+  enableMailFeedback?: boolean;
   /** Custom class name applied to the toolbar container. Use to adjust positioning or z-index. */
   className?: string;
+  /**
+   * Default annotation marker color (COLOR_OPTIONS ids).
+   * Seeds ToolbarSettings.annotationColorId on mount and updates when the prop changes.
+   */
+  primaryColor?: AnnotationColorId;
+  /**
+   * Start in annotation mode (expanded toolbar, click-to-annotate active).
+   * Defaults to false — user clicks the toolbar badge first.
+   */
+  startActive?: boolean;
+  /** Called when the user exits feedback mode (close button, Esc, idle dismiss, clear-all). */
+  onRequestClose?: () => void;
+  /** Fired on toolbar/marker interaction to reset parent idle timers. */
+  onActivity?: () => void;
+  /** True while UI that should block idle auto-dismiss is open (send panel, clear confirm). */
+  onIdleBlockedChange?: (blocked: boolean) => void;
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
@@ -332,17 +439,29 @@ export function PageFeedbackToolbarCSS({
   onAnnotationsClear,
   onCopy,
   onSubmit,
+  enableCopy = true,
   copyToClipboard = true,
   endpoint,
   sessionId: initialSessionId,
   onSessionCreated,
   webhookUrl,
+  feedbackUrl,
+  mailto,
+  feedbackContext,
+  enableMailFeedback,
   className: userClassName,
+  primaryColor,
+  startActive = false,
+  onRequestClose,
+  onActivity,
+  onIdleBlockedChange,
 }: PageFeedbackToolbarCSSProps = {}) {
-  const [isActive, setIsActive] = useState(false);
+  const [isActive, setIsActive] = useState(startActive);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [showMarkers, setShowMarkers] = useState(true);
-  const [isToolbarHidden, setIsToolbarHidden] = useState(() => loadToolbarHidden());
+  const [isToolbarHidden, setIsToolbarHidden] = useState(() =>
+    loadToolbarHidden(),
+  );
   const [isToolbarHiding, setIsToolbarHiding] = useState(false);
 
   // Stop native events from bubbling past document.body when they originate
@@ -352,6 +471,22 @@ export function PageFeedbackToolbarCSS({
   // React's synthetic event delegation (which also listens on body/root) still
   // works — we only block propagation from body → document/window.
   const portalWrapperRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  const bumpActivity = useCallback(() => {
+    onActivity?.();
+  }, [onActivity]);
+
+  const getToolbarLayoutWidths = useCallback(() => {
+    const wrapper = toolbarRef.current;
+    const container = wrapper?.querySelector(
+      "[data-toolbar-container]",
+    ) as HTMLElement | null;
+    return {
+      wrapperWidth: wrapper?.offsetWidth ?? 44,
+      contentWidth: container?.offsetWidth ?? 44,
+    };
+  }, []);
   useEffect(() => {
     const stop = (e: Event) => {
       const wrapper = portalWrapperRef.current;
@@ -427,80 +562,15 @@ export function PageFeedbackToolbarCSS({
   const [isScrolling, setIsScrolling] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isFrozen, setIsFrozen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSettingsVisible, setShowSettingsVisible] = useState(false);
-  const [settingsPage, setSettingsPage] = useState<"main" | "automations">(
-    "main",
-  );
+  const [showMailPreview, setShowMailPreview] = useState(false);
+  const [showMailPreviewVisible, setShowMailPreviewVisible] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const clearConfirmRef = useRef<HTMLDivElement>(null);
   const [tooltipsHidden, setTooltipsHidden] = useState(false);
-
-  // Layout mode state
-  const [isDesignMode, setIsDesignMode] = useState(false);
-  const [designOverlayExiting, setDesignOverlayExiting] = useState(false);
-  const [designPlacements, setDesignPlacements] = useState<DesignPlacement[]>([]);
-  const [activeDesignComponent, setActiveDesignComponent] = useState<DesignComponentType | null>(null);
-  const designPlacementsLoaded = useRef(false);
-  // Sub-mode state removed — unified mode renders both overlays simultaneously
-  const [blankCanvas, setBlankCanvas] = useState(false);
-  const [canvasReady, setCanvasReady] = useState(false); // delays .visible by one frame on mount
-  const [canvasOpacity, setCanvasOpacity] = useState(1);
-  const [canvasPurpose, setCanvasPurpose] = useState<import("../design-mode/types").CanvasPurpose>("new-page");
-  const [wireframePurpose, setWireframePurpose] = useState("");
-  const [designInteracting, setDesignInteracting] = useState(false);
-  const [rearrangeState, setRearrangeState] = useState<RearrangeState | null>(null);
-  const rearrangeLoaded = useRef(false);
-  // Stash explore/wireframe state for full isolation between modes
-  const exploreStashRef = useRef<{ rearrange: RearrangeState | null; placements: DesignPlacement[] }>({ rearrange: null, placements: [] });
-  const wireframeStashRef = useRef<{ rearrange: RearrangeState | null; placements: DesignPlacement[] }>({ rearrange: null, placements: [] });
-  // Cross-overlay deselect signals — bump one to deselect the other
-  const [designDeselectSignal, setDesignDeselectSignal] = useState(0);
-  const [rearrangeDeselectSignal, setRearrangeDeselectSignal] = useState(0);
-  const [designClearSignal, setDesignClearSignal] = useState(0);
-  const [rearrangeClearSignal, setRearrangeClearSignal] = useState(0);
-  // Track selections for cross-overlay drag coordination
-  const designSelectedIdsRef = useRef<Set<string>>(new Set());
-  const rearrangeSelectedIdsRef = useRef<Set<string>>(new Set());
-  // Track start positions for cross-drag (set when drag starts)
-  const crossDragStartRef = useRef<Map<string, { x: number; y: number }> | null>(null);
-  const designExitTimer = useRef<ReturnType<typeof originalSetTimeout> | undefined>(undefined);
-
-  // Delay blank canvas .visible by one frame when becoming visible so CSS transition fires
-  const canvasShouldBeVisible = isDesignMode && isActive && !designOverlayExiting && blankCanvas;
-  useEffect(() => {
-    if (canvasShouldBeVisible) {
-      setCanvasReady(false);
-      const raf = originalRequestAnimationFrame(() => {
-        setCanvasReady(true);
-      });
-      return () => cancelAnimationFrame(raf);
-    } else {
-      setCanvasReady(false);
-    }
-  }, [canvasShouldBeVisible]);
-
-  // Shadow annotation tracking (design → server sync)
-  const placementAnnotationMap = useRef(new Map<string, string>()); // placementId → server annotationId
-  const rearrangeAnnotationMap = useRef(new Map<string, string>()); // sectionId → server annotationId
-  const rearrangeDebounceTimer = useRef<ReturnType<typeof originalSetTimeout> | undefined>(undefined);
-
-  // Draw mode state
-  const [isDrawMode, setIsDrawMode] = useState(false);
-  const [drawStrokes, setDrawStrokes] = useState<Array<{ id: string; points: Array<{x: number, y: number}>; color: string; fixed: boolean }>>([]);
-  const drawStrokesRef = useRef(drawStrokes);
-  drawStrokesRef.current = drawStrokes;
-  const [hoveredDrawingIdx, setHoveredDrawingIdx] = useState<number | null>(null);
-  const drawCanvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawingRef = useRef(false);
-  const currentStrokeRef = useRef<Array<{x: number, y: number}>>([]);
-  const dimAmountRef = useRef(0);
-  const visualHighlightRef = useRef<number | null>(null);
-  const exitingStrokeIdRef = useRef<string | null>(null);
-  const exitingAlphaRef = useRef(1);
-
   const [tooltipSessionActive, setTooltipSessionActive] = useState(false);
-  const tooltipSessionTimerRef = useRef<ReturnType<typeof originalSetTimeout> | null>(
-    null,
-  );
+  const tooltipSessionTimerRef = useRef<ReturnType<
+    typeof originalSetTimeout
+  > | null>(null);
 
   // Cmd+shift+click multi-select state
   const [pendingMultiSelectElements, setPendingMultiSelectElements] = useState<
@@ -548,30 +618,47 @@ export function PageFeedbackToolbarCSS({
     };
   }, []);
 
-const [settings, setSettings] = useState<ToolbarSettings>(() => {
-  try {
-    const saved = JSON.parse(localStorage.getItem("feedback-toolbar-settings") ?? "");
-    return {
-      ...DEFAULT_SETTINGS,
-      ...saved,
-      annotationColorId: COLOR_OPTIONS.find(c => c.id === saved.annotationColorId)
-        ? saved.annotationColorId
-        : DEFAULT_SETTINGS.annotationColorId,
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-});
+  const resolvedPrimaryColor: AnnotationColorId =
+    primaryColor && COLOR_OPTIONS.some((c) => c.id === primaryColor)
+      ? primaryColor
+      : (DEFAULT_SETTINGS.annotationColorId as AnnotationColorId);
+
+  const [settings, setSettings] = useState<ToolbarSettings>(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("feedback-toolbar-settings") ?? "",
+      );
+      const savedColor = COLOR_OPTIONS.find(
+        (c) => c.id === saved.annotationColorId,
+      )?.id;
+      return {
+        ...DEFAULT_SETTINGS,
+        autoClearAfterCopy: Boolean(saved.autoClearAfterCopy),
+        blockInteractions:
+          typeof saved.blockInteractions === "boolean"
+            ? saved.blockInteractions
+            : DEFAULT_SETTINGS.blockInteractions,
+        annotationColorId: savedColor ?? resolvedPrimaryColor,
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS, annotationColorId: resolvedPrimaryColor };
+    }
+  });
+
+  useEffect(() => {
+    if (!primaryColor) return;
+    if (!COLOR_OPTIONS.some((color) => color.id === primaryColor)) return;
+    setSettings((current) =>
+      current.annotationColorId === primaryColor
+        ? current
+        : { ...current, annotationColorId: primaryColor },
+    );
+  }, [primaryColor]);
+
+  const configuredWebhookUrl = resolveWebhookUrl(webhookUrl, settings.webhookUrl);
+
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showEntranceAnimation, setShowEntranceAnimation] = useState(false);
-
-  const toggleTheme = () => {
-    portalWrapperRef.current?.classList.add(styles.disableTransitions);
-    setIsDarkMode((previous) => !previous);
-    originalRequestAnimationFrame(() => {
-      portalWrapperRef.current?.classList.remove(styles.disableTransitions);
-    });
-  }
 
   // Check if running in development mode - React detection only works in development mode
   const isDevMode = process.env.NODE_ENV === "development";
@@ -628,28 +715,27 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
   const popupRef = useRef<AnnotationPopupCSSHandle>(null);
   const editPopupRef = useRef<AnnotationPopupCSSHandle>(null);
-  const scrollTimeoutRef = useRef<ReturnType<typeof originalSetTimeout> | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof originalSetTimeout> | null>(
+    null,
+  );
 
   const pathname =
     typeof window !== "undefined" ? window.location.pathname : "/";
 
-  // Handle showSettings changes with exit animation
+  // Handle mail preview open/close with exit animation
   useEffect(() => {
-    if (showSettings) {
-      setShowSettingsVisible(true);
+    if (showMailPreview) {
+      setShowMailPreviewVisible(true);
     } else {
-      // Reset tooltips when settings close (fixes tooltips not showing after closing settings)
       setTooltipsHidden(false);
-      // Reset to main page when settings close
-      setSettingsPage("main");
-      const timer = originalSetTimeout(() => setShowSettingsVisible(false), 0);
+      const timer = originalSetTimeout(() => setShowMailPreviewVisible(false), 140);
       return () => clearTimeout(timer);
     }
-  }, [showSettings]);
+  }, [showMailPreview]);
 
   // Unified marker visibility - depends on toolbar active, showMarkers toggle, and not blank canvas
   // This single effect handles all marker show/hide animations
-  const shouldShowMarkers = isActive && showMarkers && !isDesignMode;
+  const shouldShowMarkers = isActive && showMarkers;
   useEffect(() => {
     if (shouldShowMarkers) {
       // Show markers - reset animations and make visible
@@ -981,7 +1067,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     if (!endpoint || !mounted || !currentSessionId) return;
 
     const eventSource = new EventSource(
-      `${endpoint}/sessions/${currentSessionId}/events`
+      `${endpoint}/sessions/${currentSessionId}/events`,
     );
 
     const removedStatuses = ["resolved", "dismissed"];
@@ -991,32 +1077,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         const event = JSON.parse(e.data);
         if (removedStatuses.includes(event.payload?.status)) {
           const id = event.payload.id as string;
-          const kind = event.payload.kind as string | undefined;
-
-          if (kind === "placement") {
-            // Reverse-lookup: find which placementId maps to this annotation ID
-            for (const [placementId, annotationId] of placementAnnotationMap.current) {
-              if (annotationId === id) {
-                placementAnnotationMap.current.delete(placementId);
-                setDesignPlacements((prev) => prev.filter((p) => p.id !== placementId));
-                break;
-              }
-            }
-          } else if (kind === "rearrange") {
-            // Reverse-lookup: find which sectionId maps to this annotation ID
-            for (const [sectionId, annotationId] of rearrangeAnnotationMap.current) {
-              if (annotationId === id) {
-                rearrangeAnnotationMap.current.delete(sectionId);
-                setRearrangeState((prev) => {
-                  if (!prev) return null;
-                  const remaining = prev.sections.filter((s) => s.id !== sectionId);
-                  if (remaining.length === 0) return null;
-                  return { ...prev, sections: remaining };
-                });
-                break;
-              }
-            }
-          } else {
+          {
             // Feedback annotation — trigger exit animation then remove
             setExitingMarkers((prev) => new Set(prev).add(id));
             originalSetTimeout(() => {
@@ -1058,7 +1119,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           const localAnnotations = loadAnnotations<Annotation>(pathname);
           if (localAnnotations.length === 0) return;
 
-          const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+          const baseUrl =
+            typeof window !== "undefined" ? window.location.origin : "";
           const pageUrl = `${baseUrl}${pathname}`;
 
           // Get or create session
@@ -1086,7 +1148,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
           // Find annotations that need syncing
           const serverIds = new Set(serverAnnotations.map((a) => a.id));
-          const unsyncedLocal = localAnnotations.filter((a) => !serverIds.has(a.id));
+          const unsyncedLocal = localAnnotations.filter(
+            (a) => !serverIds.has(a.id),
+          );
 
           if (unsyncedLocal.length > 0) {
             const results = await Promise.allSettled(
@@ -1095,15 +1159,18 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                   ...annotation,
                   sessionId: sessionId!,
                   url: pageUrl,
-                })
-              )
+                }),
+              ),
             );
 
             const syncedAnnotations = results.map((result, i) => {
               if (result.status === "fulfilled") {
                 return result.value;
               }
-              console.warn("[Agentation] Failed to sync annotation on reconnect:", result.reason);
+              console.warn(
+                "[Agentation] Failed to sync annotation on reconnect:",
+                result.reason,
+              );
               return unsyncedLocal[i];
             });
 
@@ -1127,18 +1194,6 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       syncLocalAnnotations();
     }
   }, [connectionStatus, endpoint, mounted, currentSessionId, pathname]);
-
-  const hideToolbarTemporarily = useCallback(() => {
-    if (isToolbarHiding) return;
-    setIsToolbarHiding(true);
-    setShowSettings(false);
-    setIsActive(false);
-    originalSetTimeout(() => {
-      saveToolbarHidden(true);
-      setIsToolbarHidden(true);
-      setIsToolbarHiding(false);
-    }, 400);
-  }, [isToolbarHiding]);
 
   // Demo annotations
   useEffect(() => {
@@ -1233,411 +1288,40 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     }
   }, [annotations, pathname, mounted, currentSessionId]);
 
-  // Load design placements from localStorage on mount
-  useEffect(() => {
-    if (mounted && !designPlacementsLoaded.current) {
-      designPlacementsLoaded.current = true;
-      const stored = loadDesignPlacements<DesignPlacement>(pathname);
-      if (stored.length > 0) setDesignPlacements(stored);
-    }
-  }, [mounted, pathname]);
-
-  // Save design placements to localStorage (only explore-mode data — wireframe has its own key)
-  useEffect(() => {
-    if (mounted && designPlacementsLoaded.current && !blankCanvas) {
-      if (designPlacements.length > 0) {
-        saveDesignPlacements(pathname, designPlacements);
-      } else {
-        clearDesignPlacements(pathname);
-      }
-    }
-  }, [designPlacements, pathname, mounted, blankCanvas]);
-
-  // Load rearrange state from localStorage on mount
-  useEffect(() => {
-    if (mounted && !rearrangeLoaded.current) {
-      rearrangeLoaded.current = true;
-      const stored = loadRearrangeState<RearrangeState>(pathname);
-      if (stored) {
-        // Migrate old state that lacks currentRect
-        const migrated = {
-          ...stored,
-          sections: stored.sections.map(s => ({
-            ...s,
-            currentRect: s.currentRect ?? { ...s.originalRect },
-          })),
-        };
-        setRearrangeState(migrated);
-      }
-    }
-  }, [mounted, pathname]);
-
-  // Save rearrange state to localStorage (only explore-mode data — wireframe has its own key)
-  useEffect(() => {
-    if (mounted && rearrangeLoaded.current && !blankCanvas) {
-      if (rearrangeState) {
-        saveRearrangeState(pathname, rearrangeState);
-      } else {
-        clearRearrangeState(pathname);
-      }
-    }
-  }, [rearrangeState, pathname, mounted, blankCanvas]);
-
-  // Load wireframe stash from localStorage on mount
-  const wireframeLoaded = useRef(false);
-  useEffect(() => {
-    if (mounted && !wireframeLoaded.current) {
-      wireframeLoaded.current = true;
-      const stored = loadWireframeState<RearrangeState>(pathname);
-      if (stored) {
-        wireframeStashRef.current = {
-          rearrange: stored.rearrange,
-          placements: (stored.placements || []) as DesignPlacement[],
-        };
-        if (stored.purpose) setWireframePurpose(stored.purpose);
-      }
-    }
-  }, [mounted, pathname]);
-
-  // Save wireframe stash to localStorage when it changes
-  useEffect(() => {
-    if (!mounted || !wireframeLoaded.current) return;
-    const stash = wireframeStashRef.current;
-    // Save current wireframe state: either from stash (if in explore mode) or live (if in wireframe mode)
-    if (blankCanvas) {
-      // Currently in wireframe — save live state
-      const hasContent = (rearrangeState?.sections?.length ?? 0) > 0 || designPlacements.length > 0 || wireframePurpose;
-      if (hasContent) {
-        saveWireframeState(pathname, { rearrange: rearrangeState, placements: designPlacements, purpose: wireframePurpose });
-      } else {
-        clearWireframeState(pathname);
-      }
-    } else {
-      // In explore mode — save stash
-      const hasContent = (stash.rearrange?.sections?.length ?? 0) > 0 || stash.placements.length > 0 || wireframePurpose;
-      if (hasContent) {
-        saveWireframeState(pathname, { rearrange: stash.rearrange, placements: stash.placements, purpose: wireframePurpose });
-      } else {
-        clearWireframeState(pathname);
-      }
-    }
-  }, [rearrangeState, designPlacements, wireframePurpose, blankCanvas, pathname, mounted]);
-
-  // Initialize empty rearrange state when entering explore mode
-  // Sections are captured on click, not auto-detected
-  useEffect(() => {
-    if (isDesignMode && !rearrangeState) {
-      setRearrangeState({
-        sections: [],
-        originalOrder: [],
-        detectedAt: Date.now(),
-      });
-    }
-  }, [isDesignMode, rearrangeState]);
-
-  // Sync placement shadow annotations to server
-  useEffect(() => {
-    if (!endpoint || !currentSessionId) return;
-
-    const currentMap = placementAnnotationMap.current;
-    const currentIds = new Set(designPlacements.map((p) => p.id));
-
-    // Create annotations for new placements
-    for (const p of designPlacements) {
-      if (currentMap.has(p.id)) continue;
-
-      // Mark as in-flight to avoid duplicates
-      currentMap.set(p.id, "");
-
-      const pageUrl =
-        typeof window !== "undefined"
-          ? window.location.pathname + window.location.search + window.location.hash
-          : pathname;
-
-      syncAnnotation(endpoint, currentSessionId, {
-        id: p.id,
-        x: (p.x / window.innerWidth) * 100,
-        y: p.y,
-        comment: `Place ${p.type} at (${Math.round(p.x)}, ${Math.round(p.y)}), ${p.width}×${p.height}px${p.text ? ` — "${p.text}"` : ""}`,
-        element: `[design:${p.type}]`,
-        elementPath: "[placement]",
-        timestamp: p.timestamp,
-        url: pageUrl,
-        intent: "change",
-        severity: "important",
-        kind: "placement",
-        placement: {
-          componentType: p.type,
-          width: p.width,
-          height: p.height,
-          scrollY: p.scrollY,
-          text: p.text,
-        },
-      } as Annotation)
-        .then((serverAnnotation) => {
-          // Update map with real server ID
-          if (currentMap.has(p.id)) {
-            currentMap.set(p.id, serverAnnotation.id);
-          }
-        })
-        .catch((err) => {
-          console.warn("[Agentation] Failed to sync placement annotation:", err);
-          currentMap.delete(p.id);
-        });
-    }
-
-    // Delete annotations for removed placements
-    for (const [placementId, annotationId] of currentMap) {
-      if (!currentIds.has(placementId)) {
-        currentMap.delete(placementId);
-        if (annotationId) {
-          deleteAnnotationFromServer(endpoint, annotationId).catch(() => {});
-        }
-      }
-    }
-  }, [designPlacements, endpoint, currentSessionId, pathname]);
-
-  // Sync rearrange shadow annotations to server (debounced)
-  useEffect(() => {
-    if (!endpoint || !currentSessionId) return;
-
-    if (rearrangeDebounceTimer.current) {
-      clearTimeout(rearrangeDebounceTimer.current);
-    }
-
-    rearrangeDebounceTimer.current = originalSetTimeout(() => {
-      const currentMap = rearrangeAnnotationMap.current;
-
-      if (!rearrangeState || rearrangeState.sections.length === 0) {
-        // Rearrange cleared — delete all shadow annotations
-        for (const [, annotationId] of currentMap) {
-          if (annotationId) {
-            deleteAnnotationFromServer(endpoint, annotationId).catch(() => {});
-          }
-        }
-        currentMap.clear();
-        return;
-      }
-
-      const currentIds = new Set(rearrangeState.sections.map((s) => s.id));
-      const pageUrl =
-        typeof window !== "undefined"
-          ? window.location.pathname + window.location.search + window.location.hash
-          : pathname;
-
-      // Check which sections have actually changed from original
-      for (const section of rearrangeState.sections) {
-        const orig = section.originalRect;
-        const curr = section.currentRect;
-        const hasMoved =
-          Math.abs(orig.x - curr.x) > 1 ||
-          Math.abs(orig.y - curr.y) > 1 ||
-          Math.abs(orig.width - curr.width) > 1 ||
-          Math.abs(orig.height - curr.height) > 1;
-
-        if (!hasMoved) {
-          // Section returned to original — delete annotation if exists
-          const existingId = currentMap.get(section.id);
-          if (existingId) {
-            currentMap.delete(section.id);
-            deleteAnnotationFromServer(endpoint, existingId).catch(() => {});
-          }
-          continue;
-        }
-
-        const existingAnnotationId = currentMap.get(section.id);
-        if (existingAnnotationId) {
-          // Update existing
-          updateAnnotationOnServer(endpoint, existingAnnotationId, {
-            comment: `Move ${section.label} section (${section.tagName}) — from (${Math.round(orig.x)},${Math.round(orig.y)}) ${Math.round(orig.width)}×${Math.round(orig.height)} to (${Math.round(curr.x)},${Math.round(curr.y)}) ${Math.round(curr.width)}×${Math.round(curr.height)}`,
-          }).catch((err) => {
-            console.warn("[Agentation] Failed to update rearrange annotation:", err);
-          });
-        } else {
-          // Create new
-          currentMap.set(section.id, "");
-
-          syncAnnotation(endpoint, currentSessionId, {
-            id: section.id,
-            x: (curr.x / window.innerWidth) * 100,
-            y: curr.y,
-            comment: `Move ${section.label} section (${section.tagName}) — from (${Math.round(orig.x)},${Math.round(orig.y)}) ${Math.round(orig.width)}×${Math.round(orig.height)} to (${Math.round(curr.x)},${Math.round(curr.y)}) ${Math.round(curr.width)}×${Math.round(curr.height)}`,
-            element: section.selector,
-            elementPath: "[rearrange]",
-            timestamp: Date.now(),
-            url: pageUrl,
-            intent: "change",
-            severity: "important",
-            kind: "rearrange",
-            rearrange: {
-              selector: section.selector,
-              label: section.label,
-              tagName: section.tagName,
-              originalRect: orig,
-              currentRect: curr,
-            },
-          } as Annotation)
-            .then((serverAnnotation) => {
-              if (currentMap.has(section.id)) {
-                currentMap.set(section.id, serverAnnotation.id);
-              }
-            })
-            .catch((err) => {
-              console.warn("[Agentation] Failed to sync rearrange annotation:", err);
-              currentMap.delete(section.id);
-            });
-        }
-      }
-
-      // Delete annotations for sections no longer in state
-      for (const [sectionId, annotationId] of currentMap) {
-        if (!currentIds.has(sectionId)) {
-          currentMap.delete(sectionId);
-          if (annotationId) {
-            deleteAnnotationFromServer(endpoint, annotationId).catch(() => {});
-          }
-        }
-      }
-    }, 300);
-
-    return () => {
-      if (rearrangeDebounceTimer.current) {
-        clearTimeout(rearrangeDebounceTimer.current);
-      }
-    };
-  }, [rearrangeState, endpoint, currentSessionId, pathname]);
-
-  // Visually move/resize original DOM elements to match rearrange state.
-  // Lives here (not in RearrangeOverlay) so transforms persist across sub-mode
-  // switches (rearrange ↔ add) and animate back when layout mode exits.
-  type MovedEntry = {
-    el: HTMLElement;
-    origStyles: { transform: string; transformOrigin: string; opacity: string; position: string; zIndex: string; display: string };
-    ancestors: { el: HTMLElement; overflow: string }[];
-  };
-  const rearrangeMovedEls = useRef<Map<string, MovedEntry>>(new Map());
-  useLayoutEffect(() => {
-    const sections = rearrangeState?.sections ?? [];
-    const active = new Set<string>();
-
-    if ((isDesignMode || designOverlayExiting) && isActive) {
-      for (const s of sections) {
-        active.add(s.id);
-        try {
-          const el = document.querySelector(s.selector) as HTMLElement | null;
-          if (!el) continue;
-
-          // Elevate on first encounter — prevents clipping during drag/resize
-          if (!rearrangeMovedEls.current.has(s.id)) {
-            const origStyles = {
-              transform: el.style.transform,
-              transformOrigin: el.style.transformOrigin,
-              opacity: el.style.opacity,
-              position: el.style.position,
-              zIndex: el.style.zIndex,
-              display: el.style.display,
-            };
-
-            // Find clipping ancestors
-            const ancestors: { el: HTMLElement; overflow: string }[] = [];
-            let parent = el.parentElement;
-            while (parent && parent !== document.body) {
-              const cs = getComputedStyle(parent);
-              if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
-                ancestors.push({ el: parent, overflow: parent.style.overflow });
-                parent.style.overflow = "visible";
-              }
-              parent = parent.parentElement;
-            }
-
-            // Inline elements don't support transforms — promote to inline-block
-            const computed = getComputedStyle(el);
-            if (computed.display === "inline") {
-              el.style.display = "inline-block";
-            }
-
-            rearrangeMovedEls.current.set(s.id, { el, origStyles, ancestors });
-            el.style.transformOrigin = "top left";
-            el.style.zIndex = "9999";
-          }
-
-          // Ghost mode: don't transform page elements. Outlines show ghosts instead.
-        } catch { /* invalid selector */ }
-      }
-    }
-
-    // Restore elements that are no longer captured or layout mode exited
-    for (const [id, entry] of rearrangeMovedEls.current) {
-      if (!active.has(id)) {
-        const { el, origStyles, ancestors } = entry;
-        el.style.transition = "transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1)";
-        el.style.transform = origStyles.transform;
-        el.style.transformOrigin = origStyles.transformOrigin;
-        el.style.opacity = origStyles.opacity;
-        el.style.position = origStyles.position;
-        el.style.zIndex = origStyles.zIndex;
-        rearrangeMovedEls.current.delete(id);
-        originalSetTimeout(() => {
-          el.style.transition = "";
-          el.style.display = origStyles.display;
-          for (const a of ancestors) {
-            a.el.style.overflow = a.overflow;
-          }
-        }, 450);
-      }
-    }
-  }, [rearrangeState, isDesignMode, designOverlayExiting, isActive]);
-
-  // Clean up all moved elements on unmount — animate back to original positions
-  useEffect(() => {
-    return () => {
-      for (const [, entry] of rearrangeMovedEls.current) {
-        const { el, origStyles, ancestors } = entry;
-        el.style.transition = "transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1)";
-        el.style.transform = origStyles.transform;
-        el.style.transformOrigin = origStyles.transformOrigin;
-        el.style.opacity = origStyles.opacity;
-        el.style.position = origStyles.position;
-        el.style.zIndex = origStyles.zIndex;
-        // Clean up transition + display + ancestors after animation completes
-        originalSetTimeout(() => {
-          el.style.transition = "";
-          el.style.display = origStyles.display;
-          for (const a of ancestors) {
-            a.el.style.overflow = a.overflow;
-          }
-        }, 450);
-      }
-      rearrangeMovedEls.current.clear();
-    };
-  }, []);
-
-  // Close layout mode — palette + overlays exit concurrently
-  const closeDesignMode = useCallback(() => {
-    setDesignOverlayExiting(true);
-    setIsDesignMode(false);
-    setActiveDesignComponent(null);
-    // Don't reset subMode here — it causes a crossfade during exit animation.
-    // It stays on the last-used tab for next time.
-    clearTimeout(designExitTimer.current);
-    designExitTimer.current = originalSetTimeout(() => {
-      setDesignOverlayExiting(false);
-    }, 300);
-  }, []);
-
-  // Deactivate toolbar — if in layout mode, animate out overlays independently
   const deactivate = useCallback(() => {
-    if (isDesignMode) {
-      setDesignOverlayExiting(true);
-      setIsDesignMode(false);
-      setActiveDesignComponent(null);
-      clearTimeout(designExitTimer.current);
-      designExitTimer.current = originalSetTimeout(() => {
-        setDesignOverlayExiting(false);
-      }, 300);
+    if (onRequestClose) {
+      onRequestClose();
+      return;
     }
     setIsActive(false);
-  }, [isDesignMode]);
+  }, [onRequestClose]);
+
+  useEffect(() => {
+    onIdleBlockedChange?.(showMailPreview || showClearConfirm);
+  }, [showMailPreview, showClearConfirm, onIdleBlockedChange]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    bumpActivity();
+  }, [annotations, mounted, bumpActivity]);
+
+  useEffect(() => {
+    if (showMailPreview) {
+      bumpActivity();
+    }
+  }, [showMailPreview, bumpActivity]);
+
+  useEffect(() => {
+    const root = portalWrapperRef.current;
+    if (!root || !onActivity) return;
+
+    const handlePointer = () => {
+      bumpActivity();
+    };
+
+    root.addEventListener("pointerdown", handlePointer);
+    return () => root.removeEventListener("pointerdown", handlePointer);
+  }, [onActivity, bumpActivity]);
 
   // Freeze animations (delegates to freeze-animations utility)
   const freezeAnimations = useCallback(() => {
@@ -1727,7 +1411,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       }));
 
       // Position marker near the last selected element (most recent click)
-      const lastItem = pendingMultiSelectElements[pendingMultiSelectElements.length - 1];
+      const lastItem =
+        pendingMultiSelectElements[pendingMultiSelectElements.length - 1];
       const lastEl = lastItem.element;
       const lastRect = freshRects[freshRects.length - 1];
       const lastCenterX = lastRect.left + lastRect.width / 2;
@@ -1749,7 +1434,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         isMultiSelect: true,
         isFixed: lastIsFixed,
         elementBoundingBoxes,
-        multiSelectElements: pendingMultiSelectElements.map((item) => item.element),
+        multiSelectElements: pendingMultiSelectElements.map(
+          (item) => item.element,
+        ),
         targetElement: lastEl, // Anchor marker/popup to last clicked element
         fullPath: getFullElementPath(firstEl),
         accessibility: getAccessibilityInfo(firstEl),
@@ -1774,7 +1461,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       setEditingTargetElement(null);
       setEditingTargetElements([]);
       setHoverInfo(null);
-      setShowSettings(false); // Close settings when toolbar closes
+      setShowMailPreview(false);
       setPendingMultiSelectElements([]); // Clear multi-select
       modifiersHeldRef.current = { cmd: false, shift: false }; // Reset modifier tracking
       if (isFrozen) {
@@ -1795,12 +1482,44 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     if (!isActive) return;
 
     const textElementsSelector = [
-      "p", "span", "h1", "h2", "h3", "h4", "h5", "h6",
-      "li", "td", "th", "label", "blockquote", "figcaption",
-      "caption", "legend", "dt", "dd", "pre", "code",
-      "em", "strong", "b", "i", "u", "s", "a",
-      "time", "address", "cite", "q", "abbr", "dfn",
-      "mark", "small", "sub", "sup", "[contenteditable]"
+      "p",
+      "span",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "li",
+      "td",
+      "th",
+      "label",
+      "blockquote",
+      "figcaption",
+      "caption",
+      "legend",
+      "dt",
+      "dd",
+      "pre",
+      "code",
+      "em",
+      "strong",
+      "b",
+      "i",
+      "u",
+      "s",
+      "a",
+      "time",
+      "address",
+      "cite",
+      "q",
+      "abbr",
+      "dfn",
+      "mark",
+      "small",
+      "sub",
+      "sup",
+      "[contenteditable]",
     ].join(", ");
 
     const notAgentationSelector = `:not([data-agentation-root]):not([data-agentation-root] *)`;
@@ -1826,18 +1545,9 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     };
   }, [isActive]);
 
-
-  // Cursor change when hovering a drawing stroke (both draw mode and normal mode)
-  useEffect(() => {
-    if (hoveredDrawingIdx !== null && isActive) {
-      document.documentElement.setAttribute("data-drawing-hover", "");
-      return () => document.documentElement.removeAttribute("data-drawing-hover");
-    }
-  }, [hoveredDrawingIdx, isActive]);
-
   // Handle mouse move
   useEffect(() => {
-    if (!isActive || pendingAnnotation || isDrawMode || isDesignMode) return;
+    if (!isActive || pendingAnnotation) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       // Use composedPath to get actual target inside shadow DOM
@@ -1846,11 +1556,16 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         setHoverInfo(null);
         return;
       }
+      if (closestCrossingShadow(target, "[data-feedback-guide]")) {
+        setHoverInfo(null);
+        return;
+      }
 
       const elementUnder = deepElementFromPoint(e.clientX, e.clientY);
       if (
         !elementUnder ||
-        closestCrossingShadow(elementUnder, "[data-feedback-toolbar]")
+        closestCrossingShadow(elementUnder, "[data-feedback-toolbar]") ||
+        closestCrossingShadow(elementUnder, "[data-feedback-guide]")
       ) {
         setHoverInfo(null);
         return;
@@ -1872,7 +1587,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     document.addEventListener("mousemove", handleMouseMove);
     return () => document.removeEventListener("mousemove", handleMouseMove);
-  }, [isActive, pendingAnnotation, isDrawMode, isDesignMode, effectiveReactMode, drawStrokes]);
+  }, [isActive, pendingAnnotation, effectiveReactMode]);
 
   // Start editing an annotation (right-click or click on drawing stroke)
   const startEditAnnotation = useCallback((annotation: Annotation) => {
@@ -1925,7 +1640,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
   // Handle click
   useEffect(() => {
-    if (!isActive || isDrawMode || isDesignMode) return;
+    if (!isActive) return;
 
     const handleClick = (e: MouseEvent) => {
       if (justFinishedDragRef.current) {
@@ -1937,6 +1652,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       const target = (e.composedPath()[0] || e.target) as HTMLElement;
 
       if (closestCrossingShadow(target, "[data-feedback-toolbar]")) return;
+      if (closestCrossingShadow(target, "[data-feedback-guide]")) return;
       if (closestCrossingShadow(target, "[data-annotation-popup]")) return;
       if (closestCrossingShadow(target, "[data-annotation-marker]")) return;
 
@@ -2068,8 +1784,6 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     return () => document.removeEventListener("click", handleClick, true);
   }, [
     isActive,
-    isDrawMode,
-    isDesignMode,
     pendingAnnotation,
     editingAnnotation,
     settings.blockInteractions,
@@ -2120,17 +1834,22 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       document.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [isActive, pendingMultiSelectElements, createMultiSelectPendingAnnotation]);
+  }, [
+    isActive,
+    pendingMultiSelectElements,
+    createMultiSelectPendingAnnotation,
+  ]);
 
   // Multi-select drag - mousedown
   useEffect(() => {
-    if (!isActive || pendingAnnotation || isDrawMode || isDesignMode) return;
+    if (!isActive || pendingAnnotation) return;
 
     const handleMouseDown = (e: MouseEvent) => {
       // Use composedPath to get actual target inside shadow DOM
       const target = (e.composedPath()[0] || e.target) as HTMLElement;
 
       if (closestCrossingShadow(target, "[data-feedback-toolbar]")) return;
+      if (closestCrossingShadow(target, "[data-feedback-guide]")) return;
       if (closestCrossingShadow(target, "[data-annotation-marker]")) return;
       if (closestCrossingShadow(target, "[data-annotation-popup]")) return;
 
@@ -2185,7 +1904,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [isActive, pendingAnnotation, isDrawMode, isDesignMode]);
+  }, [isActive, pendingAnnotation]);
 
   // Multi-select drag - mousemove (fully optimized with direct DOM updates)
   useEffect(() => {
@@ -2312,6 +2031,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         for (const el of candidateElements) {
           if (
             closestCrossingShadow(el, "[data-feedback-toolbar]") ||
+            closestCrossingShadow(el, "[data-feedback-guide]") ||
             closestCrossingShadow(el, "[data-annotation-marker]")
           )
             continue;
@@ -2424,6 +2144,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           if (!(el instanceof HTMLElement)) return;
           if (
             closestCrossingShadow(el, "[data-feedback-toolbar]") ||
+            closestCrossingShadow(el, "[data-feedback-guide]") ||
             closestCrossingShadow(el, "[data-annotation-marker]")
           )
             return;
@@ -2561,8 +2282,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       payload: Record<string, unknown>,
       force?: boolean,
     ): Promise<boolean> => {
-      // Settings webhookUrl overrides prop
-      const targetUrl = settings.webhookUrl || webhookUrl;
+      const targetUrl = configuredWebhookUrl;
       // Skip if no URL, or if webhooks disabled (unless force is true for manual sends)
       if (!targetUrl || (!settings.webhooksEnabled && !force)) return false;
 
@@ -2584,7 +2304,7 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         return false;
       }
     },
-    [webhookUrl, settings.webhookUrl, settings.webhooksEnabled],
+    [configuredWebhookUrl, settings.webhooksEnabled],
   );
 
   // Add annotation
@@ -2698,6 +2418,12 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
   // Delete annotation with exit animation
   const deleteAnnotation = useCallback(
     (id: string) => {
+      if (hoveredMarkerId === id) {
+        setHoveredMarkerId(null);
+        setHoveredTargetElement(null);
+        setHoveredTargetElements([]);
+      }
+
       const deletedIndex = annotations.findIndex((a) => a.id === id);
       const deletedAnnotation = annotations[deletedIndex];
 
@@ -2748,69 +2474,68 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         }
       }, 150);
     },
-    [annotations, editingAnnotation, onAnnotationDelete, fireWebhook, endpoint],
+    [annotations, editingAnnotation, onAnnotationDelete, fireWebhook, endpoint, hoveredMarkerId],
   );
 
   // Handle marker hover - finds element(s) for live position tracking
-  const handleMarkerHover = useCallback(
-    (annotation: Annotation | null) => {
-      if (!annotation) {
-        setHoveredMarkerId(null);
-        setHoveredTargetElement(null);
-        setHoveredTargetElements([]);
-        return;
-      }
+  const handleMarkerHover = useCallback((annotation: Annotation | null) => {
+    if (!annotation) {
+      setHoveredMarkerId(null);
+      setHoveredTargetElement(null);
+      setHoveredTargetElements([]);
+      return;
+    }
 
-      setHoveredMarkerId(annotation.id);
+    setHoveredMarkerId(annotation.id);
 
-      // Find elements at the annotation's position(s) for live tracking
-      if (annotation.elementBoundingBoxes?.length) {
-        // Cmd+shift+click: find element at each bounding box center
-        const elements: HTMLElement[] = [];
-        for (const bb of annotation.elementBoundingBoxes) {
-          const centerX = bb.x + bb.width / 2;
-          const centerY = bb.y + bb.height / 2 - window.scrollY;
-          // Use elementsFromPoint to look through the marker if it's covering
-          const allEls = document.elementsFromPoint(centerX, centerY);
-          const el = allEls.find(
-            (e) => !e.closest('[data-annotation-marker]') && !e.closest('[data-agentation-root]'),
-          ) as HTMLElement | undefined;
-          if (el) elements.push(el);
-        }
-        setHoveredTargetElements(elements);
-        setHoveredTargetElement(null);
-      } else if (annotation.boundingBox) {
-        // Single element
-        const bb = annotation.boundingBox;
+    // Find elements at the annotation's position(s) for live tracking
+    if (annotation.elementBoundingBoxes?.length) {
+      // Cmd+shift+click: find element at each bounding box center
+      const elements: HTMLElement[] = [];
+      for (const bb of annotation.elementBoundingBoxes) {
         const centerX = bb.x + bb.width / 2;
-        const centerY = annotation.isFixed
-          ? bb.y + bb.height / 2
-          : bb.y + bb.height / 2 - window.scrollY;
-        const el = deepElementFromPoint(centerX, centerY);
+        const centerY = bb.y + bb.height / 2 - window.scrollY;
+        // Use elementsFromPoint to look through the marker if it's covering
+        const allEls = document.elementsFromPoint(centerX, centerY);
+        const el = allEls.find(
+          (e) =>
+            !e.closest("[data-annotation-marker]") &&
+            !e.closest("[data-agentation-root]"),
+        ) as HTMLElement | undefined;
+        if (el) elements.push(el);
+      }
+      setHoveredTargetElements(elements);
+      setHoveredTargetElement(null);
+    } else if (annotation.boundingBox) {
+      // Single element
+      const bb = annotation.boundingBox;
+      const centerX = bb.x + bb.width / 2;
+      const centerY = annotation.isFixed
+        ? bb.y + bb.height / 2
+        : bb.y + bb.height / 2 - window.scrollY;
+      const el = deepElementFromPoint(centerX, centerY);
 
-        // Validate found element's size roughly matches stored bounding box
-        // (prevents using wrong child element when clicking center of a container)
-        if (el) {
-          const elRect = el.getBoundingClientRect();
-          const widthRatio = elRect.width / bb.width;
-          const heightRatio = elRect.height / bb.height;
-          // If found element is much smaller than stored, it's probably a child - don't use it
-          if (widthRatio < 0.5 || heightRatio < 0.5) {
-            setHoveredTargetElement(null);
-          } else {
-            setHoveredTargetElement(el);
-          }
-        } else {
+      // Validate found element's size roughly matches stored bounding box
+      // (prevents using wrong child element when clicking center of a container)
+      if (el) {
+        const elRect = el.getBoundingClientRect();
+        const widthRatio = elRect.width / bb.width;
+        const heightRatio = elRect.height / bb.height;
+        // If found element is much smaller than stored, it's probably a child - don't use it
+        if (widthRatio < 0.5 || heightRatio < 0.5) {
           setHoveredTargetElement(null);
+        } else {
+          setHoveredTargetElement(el);
         }
-        setHoveredTargetElements([]);
       } else {
         setHoveredTargetElement(null);
-        setHoveredTargetElements([]);
       }
-    },
-    [],
-  );
+      setHoveredTargetElements([]);
+    } else {
+      setHoveredTargetElement(null);
+      setHoveredTargetElements([]);
+    }
+  }, []);
 
   // Update annotation (edit mode submit)
   const updateAnnotation = useCallback(
@@ -2865,80 +2590,58 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
   }, []);
 
   // Clear all with staggered animation
-  const clearAll = useCallback(() => {
-    const count = annotations.length;
-    const hasDesign = designPlacements.length > 0 || !!rearrangeState;
-    if (count === 0 && drawStrokes.length === 0 && !hasDesign) return;
+  const clearAll = useCallback(
+    (options?: { requestCloseAfter?: boolean }) => {
+      if (annotations.length === 0) return;
+      onAnnotationsClear?.(annotations);
+      fireWebhook("annotations.clear", { annotations });
 
-    // Fire callback with all annotations before clearing
-    onAnnotationsClear?.(annotations);
-    fireWebhook("annotations.clear", { annotations });
-
-    // Sync deletions to server (non-blocking)
-    if (endpoint) {
-      Promise.all(
-        annotations.map((a) =>
-          deleteAnnotationFromServer(endpoint, a.id).catch((error) => {
-            console.warn(
-              "[Agentation] Failed to delete annotation from server:",
-              error,
-            );
-          }),
-        ),
-      );
-
-      // Delete shadow annotations for placements
-      for (const [, annotationId] of placementAnnotationMap.current) {
-        if (annotationId) {
-          deleteAnnotationFromServer(endpoint, annotationId).catch(() => {});
-        }
+      if (endpoint) {
+        Promise.all(
+          annotations.map((annotation) =>
+            deleteAnnotationFromServer(endpoint, annotation.id).catch(() => {}),
+          ),
+        );
       }
-      placementAnnotationMap.current.clear();
 
-      // Delete shadow annotations for rearrange
-      for (const [, annotationId] of rearrangeAnnotationMap.current) {
-        if (annotationId) {
-          deleteAnnotationFromServer(endpoint, annotationId).catch(() => {});
-        }
-      }
-      rearrangeAnnotationMap.current.clear();
-    }
-
-    setIsClearing(true);
-    setCleared(true);
-
-    // Clear draw strokes
-    setDrawStrokes([]);
-    const canvas = drawCanvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // Animate out design placements and rearrange sections, then clear
-    if (designPlacements.length > 0 || rearrangeState) {
-      setDesignClearSignal(n => n + 1);
-      setRearrangeClearSignal(n => n + 1);
+      const clearDelay = annotations.length * 30 + 200;
+      setIsClearing(true);
+      setCleared(true);
       originalSetTimeout(() => {
-        setDesignPlacements([]);
-        setRearrangeState(null);
-      }, 200);
-    }
-    if (blankCanvas) setBlankCanvas(false);
-    if (wireframePurpose) setWireframePurpose("");
-    wireframeStashRef.current = { rearrange: null, placements: [] };
-    clearWireframeState(pathname);
+        setAnnotations([]);
+        setAnimatedMarkers(new Set());
+        localStorage.removeItem(getStorageKey(pathname));
+        setIsClearing(false);
+        if (options?.requestCloseAfter) {
+          onRequestClose?.();
+        }
+      }, clearDelay);
+      originalSetTimeout(() => setCleared(false), 1500);
+    },
+    [
+      pathname,
+      annotations,
+      onAnnotationsClear,
+      fireWebhook,
+      endpoint,
+      onRequestClose,
+    ],
+  );
 
-    const totalAnimationTime = count * 30 + 200;
-    originalSetTimeout(() => {
-      setAnnotations([]);
-      setAnimatedMarkers(new Set()); // Reset animated markers
-      localStorage.removeItem(getStorageKey(pathname));
-      setIsClearing(false);
-    }, totalAnimationTime);
+  const requestClearAll = useCallback(() => {
+    if (annotations.length === 0) return;
+    setShowClearConfirm(true);
+  }, [annotations.length]);
 
-    originalSetTimeout(() => setCleared(false), 1500);
-  }, [pathname, annotations, drawStrokes, designPlacements, rearrangeState, blankCanvas, wireframePurpose, onAnnotationsClear, fireWebhook, endpoint]);
+  const confirmClearAll = useCallback(() => {
+    setShowClearConfirm(false);
+    if (annotations.length === 0) return;
+    clearAll({ requestCloseAfter: true });
+  }, [annotations.length, clearAll]);
+
+  const cancelClearAll = useCallback(() => {
+    setShowClearConfirm(false);
+  }, []);
 
   // Copy output
   const copyOutput = useCallback(async () => {
@@ -2948,193 +2651,27 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           window.location.search +
           window.location.hash
         : pathname;
-    const wireframeOnly = isDesignMode && blankCanvas;
-
-    let output: string;
-    if (wireframeOnly) {
-      // In wireframe mode, skip annotations and draw strokes — only include layout
-      if (designPlacements.length === 0 && !rearrangeState && !wireframePurpose) return;
-      output = "";
-    } else {
-      output = generateOutput(
-        annotations,
-        displayUrl,
-        settings.outputDetail,
-      );
-      if (!output && drawStrokes.length === 0 && designPlacements.length === 0 && !rearrangeState) return;
-      if (!output) output = `## Page Feedback: ${displayUrl}\n`;
-    }
-
-    // Describe draw strokes as text by detecting elements underneath
-    if (!wireframeOnly && drawStrokes.length > 0) {
-      // Collect drawing indices that have linked annotations (skip those in standalone section)
-      const linkedDrawingIndices = new Set<number>();
-      for (const a of annotations) {
-        if (a.drawingIndex != null) linkedDrawingIndices.add(a.drawingIndex);
-      }
-
-      // Temporarily hide the draw canvas so elementFromPoint hits real page elements
-      const canvas = drawCanvasRef.current;
-      if (canvas) canvas.style.visibility = "hidden";
-
-      const strokeDescriptions: string[] = [];
-      const scrollY = window.scrollY;
-      for (let strokeIdx = 0; strokeIdx < drawStrokes.length; strokeIdx++) {
-        // Skip strokes that have a linked annotation — their info is in the annotation output
-        if (linkedDrawingIndices.has(strokeIdx)) continue;
-        const stroke = drawStrokes[strokeIdx];
-        if (stroke.points.length < 2) continue;
-
-        // Get viewport coords for analysis (fixed strokes are already in viewport coords)
-        const viewportPoints = stroke.fixed
-          ? stroke.points
-          : stroke.points.map(p => ({ x: p.x, y: p.y - scrollY }));
-
-        // Bounding box (viewport coords)
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const p of viewportPoints) {
-          minX = Math.min(minX, p.x);
-          minY = Math.min(minY, p.y);
-          maxX = Math.max(maxX, p.x);
-          maxY = Math.max(maxY, p.y);
-        }
-        const bboxW = maxX - minX;
-        const bboxH = maxY - minY;
-        const bboxDiag = Math.hypot(bboxW, bboxH);
-
-        // Start/end analysis
-        const start = viewportPoints[0];
-        const end = viewportPoints[viewportPoints.length - 1];
-        const startEndDist = Math.hypot(end.x - start.x, end.y - start.y);
-
-        // Gesture classification
-        let gesture: "circle" | "box" | "underline" | "arrow" | "drawing";
-        const closedLoop = startEndDist < bboxDiag * 0.35;
-        const aspectRatio = bboxW / Math.max(bboxH, 1);
-
-        if (closedLoop && bboxDiag > 20) {
-          // Closed loop — circle vs box: measure how many points hug the bbox edges
-          // Box strokes spend time near edges; circles stay more centered
-          const edgeThreshold = Math.max(bboxW, bboxH) * 0.15;
-          let edgePoints = 0;
-          for (const p of viewportPoints) {
-            const nearLeft = p.x - minX < edgeThreshold;
-            const nearRight = maxX - p.x < edgeThreshold;
-            const nearTop = p.y - minY < edgeThreshold;
-            const nearBottom = maxY - p.y < edgeThreshold;
-            if ((nearLeft || nearRight) && (nearTop || nearBottom)) edgePoints++;
-          }
-          // If many points are near corners, it's a box
-          gesture = edgePoints > viewportPoints.length * 0.15 ? "box" : "circle";
-        } else if (aspectRatio > 3 && bboxH < 40) {
-          gesture = "underline";
-        } else if (startEndDist > bboxDiag * 0.5) {
-          gesture = "arrow";
-        } else {
-          gesture = "drawing";
-        }
-
-        // Sample elements along the stroke
-        const sampleCount = Math.min(10, viewportPoints.length);
-        const step = Math.max(1, Math.floor(viewportPoints.length / sampleCount));
-        const seenElements = new Set<HTMLElement>();
-        const elementNames: string[] = [];
-
-        const samplePoints = [start];
-        for (let i = step; i < viewportPoints.length - 1; i += step) {
-          samplePoints.push(viewportPoints[i]);
-        }
-        samplePoints.push(end);
-
-        for (const p of samplePoints) {
-          const el = deepElementFromPoint(p.x, p.y);
-          if (!el || seenElements.has(el)) continue;
-          if (closestCrossingShadow(el, "[data-feedback-toolbar]")) continue;
-          seenElements.add(el);
-          const { name } = identifyElement(el);
-          if (!elementNames.includes(name)) {
-            elementNames.push(name);
-          }
-        }
-
-        // Format description
-        const region = `${Math.round(minX)},${Math.round(minY)} → ${Math.round(maxX)},${Math.round(maxY)}`;
-        let desc: string;
-
-        if ((gesture === "circle" || gesture === "box") && elementNames.length > 0) {
-          const verb = gesture === "box" ? "Boxed" : "Circled";
-          desc = `${verb} **${elementNames[0]}**${elementNames.length > 1 ? ` (and ${elementNames.slice(1).join(", ")})` : ""} (region: ${region})`;
-        } else if (gesture === "underline" && elementNames.length > 0) {
-          desc = `Underlined **${elementNames[0]}** (${region})`;
-        } else if (gesture === "arrow" && elementNames.length >= 2) {
-          desc = `Arrow from **${elementNames[0]}** to **${elementNames[elementNames.length - 1]}** (${Math.round(start.x)},${Math.round(start.y)} → ${Math.round(end.x)},${Math.round(end.y)})`;
-        } else if (elementNames.length > 0) {
-          desc = `${gesture === "arrow" ? "Arrow" : "Drawing"} near **${elementNames.join("**, **")}** (region: ${region})`;
-        } else {
-          desc = `Drawing at ${region}`;
-        }
-        strokeDescriptions.push(desc);
-      }
-
-      // Restore canvas
-      if (canvas) canvas.style.visibility = "";
-
-      if (strokeDescriptions.length > 0) {
-        output += `\n**Drawings:**\n`;
-        strokeDescriptions.forEach((d, i) => {
-          output += `${i + 1}. ${d}\n`;
-        });
-      }
-    }
-
-    // Append design layout section if there are placements (or purpose in wireframe mode)
-    if (designPlacements.length > 0 || (wireframeOnly && wireframePurpose)) {
-      output += "\n" + generateDesignOutput(designPlacements, {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      }, { blankCanvas, wireframePurpose: wireframePurpose || undefined }, settings.outputDetail);
-    }
-
-    // Append rearrange section if sections were reordered
-    if (rearrangeState) {
-      const rearrangeOutput = generateRearrangeOutput(rearrangeState, settings.outputDetail, {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-      if (rearrangeOutput) {
-        output += "\n" + rearrangeOutput;
-      }
-    }
-
+    const output = generateOutput(
+      annotations,
+      displayUrl,
+      settings.outputDetail,
+    );
+    if (!output) return;
     if (copyToClipboard) {
       try {
         await navigator.clipboard.writeText(output);
       } catch {
-        // Clipboard may fail (permissions, not HTTPS, etc.) - continue anyway
+        /* clipboard may be unavailable */
       }
     }
-
-    // Fire callback with markdown output (always, regardless of clipboard success)
     onCopy?.(output);
-
     setCopied(true);
     originalSetTimeout(() => setCopied(false), 2000);
-
-    if (settings.autoClearAfterCopy) {
-      originalSetTimeout(() => clearAll(), 500);
-    }
+    if (settings.autoClearAfterCopy) originalSetTimeout(() => clearAll(), 500);
   }, [
     annotations,
-    drawStrokes,
-    designPlacements,
-    rearrangeState,
-    blankCanvas,
-    isDesignMode,
-    canvasPurpose,
-    wireframePurpose,
     pathname,
     settings.outputDetail,
-    effectiveReactMode,
     settings.autoClearAfterCopy,
     clearAll,
     copyToClipboard,
@@ -3149,32 +2686,8 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
           window.location.search +
           window.location.hash
         : pathname;
-    let output = generateOutput(
-      annotations,
-      displayUrl,
-      settings.outputDetail,
-    );
-    if (!output && designPlacements.length === 0 && !rearrangeState) return;
-    if (!output) output = `## Page Feedback: ${displayUrl}\n`;
-
-    // Append design layout section if there are placements
-    if (designPlacements.length > 0) {
-      output += "\n" + generateDesignOutput(designPlacements, {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      }, { blankCanvas, wireframePurpose: wireframePurpose || undefined }, settings.outputDetail);
-    }
-
-    // Append rearrange section if sections were reordered
-    if (rearrangeState) {
-      const rearrangeOutput = generateRearrangeOutput(rearrangeState, settings.outputDetail, {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-      if (rearrangeOutput) {
-        output += "\n" + rearrangeOutput;
-      }
-    }
+    let output = generateOutput(annotations, displayUrl, settings.outputDetail);
+    if (!output) return;
 
     // Fire onSubmit callback
     if (onSubmit) {
@@ -3194,24 +2707,102 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
     setSendState(success ? "sent" : "failed");
     originalSetTimeout(() => setSendState("idle"), 2500);
 
-    // Clear annotations if send succeeded and autoClearAfterCopy is enabled
-    if (success && settings.autoClearAfterCopy) {
+    if (success) {
       originalSetTimeout(() => clearAll(), 500);
     }
   }, [
     onSubmit,
     fireWebhook,
     annotations,
-    designPlacements,
-    rearrangeState,
-    blankCanvas,
-    canvasPurpose,
     pathname,
     settings.outputDetail,
-    effectiveReactMode,
-    settings.autoClearAfterCopy,
     clearAll,
   ]);
+
+  const sendFeedbackMail = useCallback(
+    async (message?: string): Promise<boolean> => {
+      if (annotations.length === 0 && !message?.trim()) return false;
+
+      const pageUrl =
+        typeof window !== "undefined" ? window.location.href : pathname;
+      const markdown = generateOutput(
+        annotations,
+        pageUrl,
+        settings.outputDetail,
+      );
+      const payload = buildFeedbackMailPayload(annotations, {
+        context: feedbackContext,
+        markdown,
+        message: message?.trim() || undefined,
+      });
+
+    const httpTargets: string[] = [];
+    if (isHttpDestination(feedbackUrl)) {
+      httpTargets.push(feedbackUrl!.trim());
+    }
+    const webhookTarget = configuredWebhookUrl;
+    if (
+      isHttpDestination(webhookTarget) &&
+      !httpTargets.includes(webhookTarget)
+    ) {
+      httpTargets.push(webhookTarget);
+    }
+
+    const mailtoConfigured =
+      mailto === true ||
+      (typeof mailto === "string" && mailto.trim().length > 0);
+
+    if (httpTargets.length === 0 && !mailtoConfigured) return false;
+
+    let httpOk = true;
+    if (httpTargets.length > 0) {
+      const results = await Promise.all(
+        httpTargets.map(async (url) => {
+          try {
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            return response.ok;
+          } catch (error) {
+            console.warn("[Agentation] Feedback POST failed:", error);
+            return false;
+          }
+        }),
+      );
+      httpOk = results.every(Boolean);
+    }
+
+    if (mailtoConfigured) {
+      window.location.href = buildFeedbackMailtoHref(
+        payload,
+        mailto === true ? true : mailto!,
+      );
+    }
+
+    return httpOk;
+  },
+  [
+    annotations,
+    pathname,
+    settings.outputDetail,
+    configuredWebhookUrl,
+    feedbackUrl,
+    mailto,
+    feedbackContext,
+  ]);
+
+  const handleSendFeedbackMail = useCallback(
+    async (message?: string): Promise<boolean> => {
+      const ok = await sendFeedbackMail(message);
+      if (ok) {
+        clearAll();
+      }
+      return ok;
+    },
+    [sendFeedbackMail, clearAll],
+  );
 
   // Toolbar dragging - mousemove and mouseup
   useEffect(() => {
@@ -3236,18 +2827,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
         // Constrain to viewport
         const padding = 20;
-        const wrapperWidth = 337; // .toolbar wrapper width
+        const { wrapperWidth, contentWidth } = getToolbarLayoutWidths();
         const toolbarHeight = 44;
 
         // Content is right-aligned within wrapper via margin-left: auto
-        // Calculate content width based on state
-        const contentWidth = isActive
-          ? connectionStatus === "connected"
-            ? 297
-            : 257
-          : 44; // collapsed circle
-
-        // Content offset from wrapper left edge
         const contentOffset = wrapperWidth - contentWidth;
 
         // Min X: content left edge >= padding
@@ -3281,15 +2864,20 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragStartPos, isDraggingToolbar, isActive, connectionStatus]);
+  }, [
+    dragStartPos,
+    isDraggingToolbar,
+    isActive,
+    getToolbarLayoutWidths,
+  ]);
 
   // Handle toolbar drag start
   const handleToolbarMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Only drag when clicking the toolbar background (not buttons or settings)
+      // Only drag when clicking the toolbar background (not buttons or panels)
       if (
         (e.target as HTMLElement).closest("button") ||
-        (e.target as HTMLElement).closest('[data-agentation-settings-panel]')
+        (e.target as HTMLElement).closest("[data-agentation-mail-preview]")
       ) {
         return;
       }
@@ -3321,21 +2909,12 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     const constrainPosition = () => {
       const padding = 20;
-      const wrapperWidth = 337; // .toolbar wrapper width
+      const { wrapperWidth, contentWidth } = getToolbarLayoutWidths();
       const toolbarHeight = 44;
 
       let newX = toolbarPosition.x;
       let newY = toolbarPosition.y;
 
-      // Content is right-aligned within wrapper via margin-left: auto
-      // Calculate content width based on state
-      const contentWidth = isActive
-        ? connectionStatus === "connected"
-          ? 297
-          : 257
-        : 44; // collapsed circle
-
-      // Content offset from wrapper left edge
       const contentOffset = wrapperWidth - contentWidth;
 
       // Min X: content left edge >= padding
@@ -3360,12 +2939,15 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
     window.addEventListener("resize", constrainPosition);
     return () => window.removeEventListener("resize", constrainPosition);
-  }, [toolbarPosition, isActive, connectionStatus]);
+  }, [
+    toolbarPosition,
+    isActive,
+    getToolbarLayoutWidths,
+  ]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (capture on window so they fire inside shadow DOM)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
       const target = e.target as HTMLElement;
       const isTyping =
         target.tagName === "INPUT" ||
@@ -3373,35 +2955,37 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         target.isContentEditable;
 
       if (e.key === "Escape") {
-        // Exit layout mode first if active
-        if (isDesignMode) {
-          if (activeDesignComponent) {
-            setActiveDesignComponent(null);
-          } else {
-            closeDesignMode();
-          }
+        if (showClearConfirm) {
+          e.preventDefault();
+          setShowClearConfirm(false);
           return;
         }
-        // Exit draw mode first if active
-        if (isDrawMode) {
-          setIsDrawMode(false);
+        if (showMailPreview) {
+          e.preventDefault();
+          setShowMailPreview(false);
           return;
         }
-        // Clear multi-select if active
         if (pendingMultiSelectElements.length > 0) {
+          e.preventDefault();
           setPendingMultiSelectElements([]);
           return;
         }
         if (pendingAnnotation) {
-          // Let popup handle
-        } else if (isActive) {
-          hideTooltipsUntilMouseLeave();
-          setIsActive(false);
+          return;
         }
+        if (isActive) {
+          e.preventDefault();
+          hideTooltipsUntilMouseLeave();
+          deactivate();
+        }
+        return;
       }
 
-      // Cmd+Shift+F / Ctrl+Shift+F to toggle feedback mode
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "f" || e.key === "F")) {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        (e.key === "f" || e.key === "F")
+      ) {
         e.preventDefault();
         hideTooltipsUntilMouseLeave();
         if (isActive) {
@@ -3412,68 +2996,49 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
         return;
       }
 
-      // Skip other shortcuts if typing or modifier keys are held
-      if (isTyping || e.metaKey || e.ctrlKey) return;
+      if (!isActive || isTyping || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      // "P" to toggle pause/freeze
       if (e.key === "p" || e.key === "P") {
         e.preventDefault();
         hideTooltipsUntilMouseLeave();
         toggleFreeze();
+        return;
       }
 
-      // "L" to toggle layout mode
-      if (e.key === "l" || e.key === "L") {
-        e.preventDefault();
-        hideTooltipsUntilMouseLeave();
-        if (isDrawMode) setIsDrawMode(false);
-        if (showSettings) setShowSettings(false);
-        if (pendingAnnotation) cancelAnnotation();
-        if (isDesignMode) {
-          closeDesignMode();
-        } else {
-          setIsDesignMode(true);
-        }
-      }
-
-      // "H" to toggle marker visibility
       if (e.key === "h" || e.key === "H") {
         if (annotations.length > 0) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
           setShowMarkers((prev) => !prev);
         }
+        return;
       }
 
-      // "C" to copy output
-      if (e.key === "c" || e.key === "C") {
-        if (annotations.length > 0 || designPlacements.length > 0 || rearrangeState) {
+      if (enableCopy && (e.key === "c" || e.key === "C")) {
+        if (annotations.length > 0) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
           copyOutput();
         }
+        return;
       }
 
-      // "X" to clear all
       if (e.key === "x" || e.key === "X") {
-        if (annotations.length > 0 || designPlacements.length > 0 || rearrangeState) {
+        if (annotations.length > 0) {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
-          clearAll();
-          if (designPlacements.length > 0) setDesignPlacements([]);
-          if (rearrangeState) setRearrangeState(null);
+          if (showClearConfirm) {
+            confirmClearAll();
+          } else {
+            requestClearAll();
+          }
         }
+        return;
       }
 
-      // "S" to send annotations
       if (e.key === "s" || e.key === "S") {
-        const hasValidWebhook =
-          isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "");
-        if (
-          annotations.length > 0 &&
-          hasValidWebhook &&
-          sendState === "idle"
-        ) {
+        const hasValidWebhook = isValidUrl(configuredWebhookUrl);
+        if (annotations.length > 0 && hasValidWebhook && sendState === "idle") {
           e.preventDefault();
           hideTooltipsUntilMouseLeave();
           sendToWebhook();
@@ -3481,25 +3046,24 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [
     isActive,
-    isDrawMode,
-    isDesignMode,
-    activeDesignComponent,
-    designPlacements,
-    rearrangeState,
     pendingAnnotation,
     annotations.length,
-    settings.webhookUrl,
-    webhookUrl,
+    configuredWebhookUrl,
     sendState,
     sendToWebhook,
     toggleFreeze,
     copyOutput,
-    clearAll,
+    requestClearAll,
+    confirmClearAll,
+    showClearConfirm,
+    showMailPreview,
+    enableCopy,
     pendingMultiSelectElements,
+    deactivate,
   ]);
 
   if (!mounted) return null;
@@ -3509,12 +3073,25 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
 
   // Filter annotations for rendering (exclude exiting ones from normal flow)
   const visibleAnnotations = annotations.filter(
-    (a) => !exitingMarkers.has(a.id) && a.kind !== "placement" && a.kind !== "rearrange",
+    (a) => !exitingMarkers.has(a.id),
   );
   const hasVisibleAnnotations = visibleAnnotations.length > 0;
   const exitingAnnotationsList = annotations.filter((a) =>
     exitingMarkers.has(a.id),
   );
+
+  const hasMailDestination =
+    isHttpDestination(feedbackUrl) ||
+    isHttpDestination(configuredWebhookUrl) ||
+    mailto === true ||
+    (typeof mailto === "string" && mailto.trim().length > 0);
+  const showMailFeedback =
+    enableMailFeedback === true ||
+    (enableMailFeedback !== false && hasMailDestination);
+  const sendButtonVisible =
+    isActive &&
+    !settings.webhooksEnabled &&
+    isValidUrl(configuredWebhookUrl || "");
 
   // Helper function to calculate viewport-aware tooltip positioning
   // Helper function to calculate viewport-aware tooltip positioning
@@ -3563,906 +3140,553 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
   };
 
   return createPortal(
-    <div ref={portalWrapperRef} style={{ display: "contents" }} data-agentation-theme={isDarkMode ? "dark" : "light"} data-agentation-accent={settings.annotationColorId} data-agentation-root="">
-      {/* Toolbar */}
+    <ShadowRoot host="agentation-toolbar" style={{ display: "contents" }}>
+      <style>
+        {shadowCss}
+        {agentationColorTokensCss}
+      </style>
       <div
-        className={`${styles.toolbar}${userClassName ? ` ${userClassName}` : ""}`}
-        data-feedback-toolbar
-        data-agentation-toolbar
-        style={
-          toolbarPosition
-            ? {
-                left: toolbarPosition.x,
-                top: toolbarPosition.y,
-                right: "auto",
-                bottom: "auto",
-              }
-            : undefined
-        }
+        ref={portalWrapperRef}
+        style={{ display: "contents" }}
+        data-agentation-theme={isDarkMode ? "dark" : "light"}
+        data-agentation-accent={settings.annotationColorId}
+        data-agentation-root=""
       >
-        {/* Morphing container */}
+        {/* Toolbar */}
         <div
-          className={`${styles.toolbarContainer} ${isActive ? styles.expanded : styles.collapsed} ${showEntranceAnimation ? styles.entrance : ""} ${isToolbarHiding ? styles.hiding : ""} ${!settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.serverConnected : ""}`}
-          onClick={
-            !isActive
-              ? (e) => {
-                  // Don't activate if we just finished dragging
-                  if (justFinishedToolbarDragRef.current) {
-                    justFinishedToolbarDragRef.current = false;
-                    e.preventDefault();
-                    return;
-                  }
-                  setIsActive(true);
-                }
-              : undefined
-          }
-          onMouseDown={handleToolbarMouseDown}
-          role={!isActive ? "button" : undefined}
-          tabIndex={!isActive ? 0 : -1}
-          title={!isActive ? "Start feedback mode" : undefined}
-        >
-          {/* Toggle content - visible when collapsed */}
-          <div
-            className={`${styles.toggleContent} ${!isActive ? styles.visible : styles.hidden}`}
-          >
-            <IconListSparkle size={24} />
-            {hasVisibleAnnotations && (
-              <span
-                className={`${styles.badge} ${isActive ? styles.fadeOut : ""} ${showEntranceAnimation ? styles.entrance : ""}`}
-              >
-                {visibleAnnotations.length}
-              </span>
-            )}
-          </div>
-
-          {/* Controls content - visible when expanded */}
-          <div
-            className={`${styles.controlsContent} ${isActive ? styles.visible : styles.hidden} ${
-              toolbarPosition && toolbarPosition.y < 100
-                ? styles.tooltipBelow
-                : ""
-            } ${tooltipsHidden || showSettings ? styles.tooltipsHidden : ""} ${tooltipSessionActive ? styles.tooltipsInSession : ""}`}
-            onMouseEnter={handleControlsMouseEnter}
-            onMouseLeave={handleControlsMouseLeave}
-          >
-            <div
-              className={`${styles.buttonWrapper} ${
-                toolbarPosition && toolbarPosition.x < 120
-                  ? styles.buttonWrapperAlignLeft
-                  : ""
-              }`}
-            >
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  toggleFreeze();
-                }}
-                data-active={isFrozen}
-              >
-                <IconPausePlayAnimated size={24} isPaused={isFrozen} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {isFrozen ? "Resume animations" : "Pause animations"}
-                <span className={styles.shortcut}>P</span>
-              </span>
-            </div>
-
-            {/* Draw mode disabled for now
-            <div className={styles.buttonWrapper}>
-              <button
-                className={`${styles.controlButton} ${!isDarkMode ? styles.light : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  if (isDesignMode) closeDesignMode();
-                  setIsDrawMode(prev => !prev);
-                }}
-                data-active={isDrawMode}
-              >
-                <IconPencil size={24} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {isDrawMode ? "Exit draw mode" : "Draw mode"}
-                <span className={styles.shortcut}>D</span>
-              </span>
-            </div>
-            */}
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={`${styles.controlButton} ${!isDarkMode ? styles.light : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  if (isDrawMode) setIsDrawMode(false);
-                  if (showSettings) setShowSettings(false);
-                  if (pendingAnnotation) cancelAnnotation();
-                  if (isDesignMode) {
-                    closeDesignMode();
-                  } else {
-                    setIsDesignMode(true);
-                  }
-                }}
-                data-active={isDesignMode}
-                style={isDesignMode && blankCanvas ? { color: '#f97316', background: 'rgba(249, 115, 22, 0.25)' } : undefined}
-              >
-                <IconLayout size={21} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {isDesignMode ? "Exit layout mode" : "Layout mode"}
-                <span className={styles.shortcut}>L</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  setShowMarkers(!showMarkers);
-                }}
-                disabled={!hasAnnotations || isDesignMode}
-              >
-                <IconEyeAnimated size={24} isOpen={showMarkers} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {showMarkers ? "Hide markers" : "Show markers"}
-                <span className={styles.shortcut}>H</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={`${styles.controlButton} ${copied ? styles.statusShowing : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  copyOutput();
-                }}
-                disabled={isDesignMode && blankCanvas
-                  ? designPlacements.length === 0 && !(rearrangeState?.sections?.length)
-                  : !hasAnnotations && drawStrokes.length === 0 && designPlacements.length === 0 && !(rearrangeState?.sections?.length)}
-                data-active={copied}
-              >
-                <IconCopyAnimated size={24} copied={copied} tint={isDesignMode && blankCanvas && (designPlacements.length > 0 || !!(rearrangeState?.sections?.length)) ? "#f97316" : undefined} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                {isDesignMode && blankCanvas ? "Copy layout" : "Copy"}
-                <span className={styles.shortcut}>C</span>
-              </span>
-            </div>
-
-            {/* Send button - only visible when webhook URL is available AND auto-send is off */}
-            <div
-              className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${isActive && !settings.webhooksEnabled && (isValidUrl(settings.webhookUrl) || isValidUrl(webhookUrl || "")) ? styles.sendButtonVisible : ""}`}
-            >
-              <button
-                className={`${styles.controlButton} ${sendState === "sent" || sendState === "failed" ? styles.statusShowing : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  sendToWebhook();
-                }}
-                disabled={
-                  !hasAnnotations ||
-                  (!isValidUrl(settings.webhookUrl) &&
-                    !isValidUrl(webhookUrl || "")) ||
-                  sendState === "sending"
-                }
-                data-no-hover={sendState === "sent" || sendState === "failed"}
-                tabIndex={
-                  isValidUrl(settings.webhookUrl) ||
-                  isValidUrl(webhookUrl || "")
-                    ? 0
-                    : -1
-                }
-              >
-                <IconSendArrow size={24} state={sendState} />
-                {hasAnnotations && sendState === "idle" && (
-                  <span
-                    className={styles.buttonBadge}
-                  >
-                    {annotations.length}
-                  </span>
-                )}
-              </button>
-              <span className={styles.buttonTooltip}>
-                Send feedback
-                <span className={styles.shortcut}>S</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  clearAll();
-                }}
-                disabled={!hasAnnotations && drawStrokes.length === 0 && designPlacements.length === 0 && !(rearrangeState?.sections?.length)}
-                data-danger
-              >
-                <IconTrashAlt size={24} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                Clear all
-                <span className={styles.shortcut}>X</span>
-              </span>
-            </div>
-
-            <div className={styles.buttonWrapper}>
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  if (isDesignMode) closeDesignMode();
-                  setShowSettings(!showSettings);
-                }}
-              >
-                <IconGear size={24} />
-              </button>
-              {endpoint && connectionStatus !== "disconnected" && (
-                <span
-                  className={`${styles.mcpIndicator} ${styles[connectionStatus]} ${showSettings ? styles.hidden : ""}`}
-                  title={
-                    connectionStatus === "connected"
-                      ? "MCP Connected"
-                      : "MCP Connecting..."
-                  }
-                />
-              )}
-              <span className={styles.buttonTooltip}>Settings</span>
-            </div>
-
-            <div
-              className={styles.divider}
-            />
-
-            <div
-              className={`${styles.buttonWrapper} ${
-                toolbarPosition &&
-                typeof window !== "undefined" &&
-                toolbarPosition.x > window.innerWidth - 120
-                  ? styles.buttonWrapperAlignRight
-                  : ""
-              }`}
-            >
-              <button
-                className={styles.controlButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  hideTooltipsUntilMouseLeave();
-                  deactivate();
-                }}
-              >
-                <IconXmarkLarge size={24} />
-              </button>
-              <span className={styles.buttonTooltip}>
-                Exit
-                <span className={styles.shortcut}>Esc</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Layout Mode Palette */}
-            <DesignPalette
-              visible={isDesignMode && isActive}
-              activeType={activeDesignComponent}
-              onSelect={(type) => {
-                setActiveDesignComponent(activeDesignComponent === type ? null : type);
-              }}
-              isDarkMode={isDarkMode}
-              sectionCount={rearrangeState?.sections.length ?? 0}
-              onDetectSections={() => {
-                const sections = detectPageSections();
-                const existing = rearrangeState?.sections ?? [];
-                const existingSelectors = new Set(existing.map(s => s.selector));
-                const newSections = sections.filter(s => !existingSelectors.has(s.selector));
-                const merged = [...existing, ...newSections];
-                const mergedOrder = [...(rearrangeState?.originalOrder ?? []), ...newSections.map(s => s.id)];
-                setRearrangeState({
-                  sections: merged,
-                  originalOrder: mergedOrder,
-                  detectedAt: Date.now(),
-                });
-              }}
-              placementCount={designPlacements.length}
-              onClearPlacements={() => {
-                // Animate placements and rearrange sections out, then clear
-                setDesignClearSignal(n => n + 1);
-                setRearrangeClearSignal(n => n + 1);
-                originalSetTimeout(() => {
-                  setRearrangeState({
-                    sections: [],
-                    originalOrder: [],
-                    detectedAt: Date.now(),
-                  });
-                }, 200);
-              }}
-              blankCanvas={blankCanvas}
-              onBlankCanvasChange={(on) => {
-                const emptyRearrange = { sections: [], originalOrder: [], detectedAt: Date.now() };
-                if (on) {
-                  // Entering wireframe: stash all explore state, restore wireframe state
-                  exploreStashRef.current = { rearrange: rearrangeState, placements: designPlacements };
-                  setRearrangeState(wireframeStashRef.current.rearrange || emptyRearrange);
-                  setDesignPlacements(wireframeStashRef.current.placements);
-                  setActiveDesignComponent(null);
-                } else {
-                  // Leaving wireframe: stash all wireframe state, restore explore state
-                  wireframeStashRef.current = { rearrange: rearrangeState, placements: designPlacements };
-                  setRearrangeState(exploreStashRef.current.rearrange || emptyRearrange);
-                  setDesignPlacements(exploreStashRef.current.placements);
-                }
-                setBlankCanvas(on);
-              }}
-              wireframePurpose={wireframePurpose}
-              onWireframePurposeChange={setWireframePurpose}
-              Tooltip={HelpTooltip}
-              onDragStart={(type, e) => {
-                e.preventDefault();
-                const def = DEFAULT_SIZES[type];
-                let preview: HTMLDivElement | null = null;
-                let didDrag = false;
-                const startX = e.clientX;
-                const startY = e.clientY;
-
-                // Find toolbar bottom for distance-based scaling
-                const toolbar = (e.target as HTMLElement).closest("[data-feedback-toolbar]");
-                const toolbarTop = toolbar?.getBoundingClientRect().top ?? window.innerHeight;
-
-                const onMove = (ev: MouseEvent) => {
-                  const dx = ev.clientX - startX;
-                  const dy = ev.clientY - startY;
-
-                  if (!didDrag && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-                    didDrag = true;
-                    preview = document.createElement("div");
-                    preview.className = `${designStyles.dragPreview}${blankCanvas ? ` ${designStyles.dragPreviewWireframe}` : ""}`;
-                    document.body.appendChild(preview);
-                  }
-
-                  if (!preview) return;
-
-                  // Scale up as cursor moves away from toolbar
-                  const dist = Math.max(0, toolbarTop - ev.clientY);
-                  const progress = Math.min(1, dist / 180);
-                  const eased = 1 - Math.pow(1 - progress, 2); // ease-out
-
-                  const minW = 28;
-                  const minH = 20;
-                  const maxW = Math.min(140, def.width * 0.18);
-                  const maxH = Math.min(90, def.height * 0.18);
-                  const w = minW + (maxW - minW) * eased;
-                  const h = minH + (maxH - minH) * eased;
-
-                  preview.style.width = `${w}px`;
-                  preview.style.height = `${h}px`;
-                  preview.style.left = `${ev.clientX - w / 2}px`;
-                  preview.style.top = `${ev.clientY - h / 2}px`;
-                  preview.style.opacity = `${0.5 + 0.5 * eased}`;
-                  preview.textContent = eased > 0.25 ? type : "";
-                };
-
-                const onUp = (ev: MouseEvent) => {
-                  window.removeEventListener("mousemove", onMove);
-                  window.removeEventListener("mouseup", onUp);
-                  if (preview) document.body.removeChild(preview);
-
-                  if (didDrag) {
-                    const w = def.width;
-                    const h = def.height;
-                    const scrollY = window.scrollY;
-                    const x = Math.max(0, ev.clientX - w / 2);
-                    const y = Math.max(0, ev.clientY + scrollY - h / 2);
-                    const placement: DesignPlacement = {
-                      id: `dp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                      type,
-                      x,
-                      y,
-                      width: w,
-                      height: h,
-                      scrollY,
-                      timestamp: Date.now(),
-                    };
-                    setDesignPlacements((prev) => [...prev, placement]);
-                    setActiveDesignComponent(null);
-                    // Deselect any previously selected placements
-                    designSelectedIdsRef.current = new Set();
-                    setDesignDeselectSignal(n => n + 1);
-                  }
-                };
-
-                window.addEventListener("mousemove", onMove);
-                window.addEventListener("mouseup", onUp);
-              }}
-            />
-
-          <SettingsPanel
-            settings={settings}
-            onSettingsChange={(patch) => setSettings((s) => ({ ...s, ...patch }))}
-            isDarkMode={isDarkMode}
-            onToggleTheme={toggleTheme}
-            isDevMode={isDevMode}
-            connectionStatus={connectionStatus}
-            endpoint={endpoint}
-            isVisible={showSettingsVisible}
-            toolbarNearBottom={!!toolbarPosition && toolbarPosition.y < 230}
-            settingsPage={settingsPage}
-            onSettingsPageChange={setSettingsPage}
-            onHideToolbar={hideToolbarTemporarily}
-          />
-        </div>
-      </div>
-
-      {/* Blank canvas backdrop — stays mounted so opacity transition works on open/close */}
-      {(isDesignMode || designOverlayExiting) && (
-        <div
-          className={`${designStyles.blankCanvas} ${canvasReady ? designStyles.visible : ""} ${designInteracting ? designStyles.gridActive : ""}`}
-          style={{ '--canvas-opacity': canvasOpacity } as React.CSSProperties}
+          ref={toolbarRef}
+          className={`${styles.toolbar}${userClassName ? ` ${userClassName}` : ""}`}
           data-feedback-toolbar
-        />
-      )}
-
-      {/* Wireframe hint — bottom-left notice */}
-      {isDesignMode && blankCanvas && canvasReady && (
-        <div className={designStyles.wireframeNotice} data-feedback-toolbar>
-          <div className={designStyles.wireframeOpacityRow}>
-            <span className={designStyles.wireframeOpacityLabel}>Toggle Opacity</span>
-            <input
-              type="range"
-              className={designStyles.wireframeOpacitySlider}
-              min={0}
-              max={1}
-              step={0.01}
-              value={canvasOpacity}
-              onChange={(e) => setCanvasOpacity(Number(e.target.value))}
-            />
-          </div>
-          <div className={designStyles.wireframeNoticeTitleRow}>
-            <span className={designStyles.wireframeNoticeTitle}>Wireframe Mode</span>
-            <span className={designStyles.wireframeNoticeDivider} />
-            <button
-              className={designStyles.wireframeStartOver}
-              onClick={() => {
-                setDesignClearSignal(n => n + 1);
-                setRearrangeState({ sections: [], originalOrder: [], detectedAt: Date.now() });
-                wireframeStashRef.current = { rearrange: null, placements: [] };
-                setWireframePurpose("");
-                clearWireframeState(pathname);
-              }}
-            >
-              Start Over
-            </button>
-          </div>
-          Drag components onto the canvas.<br />Copied output will only include the wireframed layout.
-        </div>
-      )}
-
-      {/* Layout mode overlay — passthrough when no component selected */}
-      {(isDesignMode || designOverlayExiting) && (
-        <DesignMode
-          placements={designPlacements}
-          onChange={setDesignPlacements}
-          activeComponent={designOverlayExiting ? null : activeDesignComponent}
-          onActiveComponentChange={setActiveDesignComponent}
-          isDarkMode={isDarkMode}
-          exiting={designOverlayExiting}
-          onInteractionChange={setDesignInteracting}
-          passthrough={!activeDesignComponent}
-          extraSnapRects={rearrangeState?.sections.map(s => s.currentRect)}
-          deselectSignal={designDeselectSignal}
-          clearSignal={designClearSignal}
-          wireframe={blankCanvas}
-          onSelectionChange={(ids, isShift) => {
-            designSelectedIdsRef.current = ids;
-            if (!isShift) {
-              rearrangeSelectedIdsRef.current = new Set();
-              setRearrangeDeselectSignal(n => n + 1);
-            }
-          }}
-          onDragMove={(dx, dy) => {
-            // Move selected rearrange sections by same delta
-            const selIds = rearrangeSelectedIdsRef.current;
-            if (!selIds.size || !rearrangeState) return;
-            // Cache start positions on first move
-            if (!crossDragStartRef.current) {
-              crossDragStartRef.current = new Map();
-              for (const s of rearrangeState.sections) {
-                if (selIds.has(s.id)) {
-                  crossDragStartRef.current.set(s.id, { x: s.currentRect.x, y: s.currentRect.y });
-                }
-              }
-            }
-            for (const s of rearrangeState.sections) {
-              if (!selIds.has(s.id)) continue;
-              const start = crossDragStartRef.current.get(s.id);
-              if (!start) continue;
-              const outlineEl = document.querySelector(`[data-rearrange-section="${s.id}"]`) as HTMLElement | null;
-              if (outlineEl) outlineEl.style.transform = `translate(${dx}px, ${dy}px)`;
-            }
-          }}
-          onDragEnd={(dx, dy, committed) => {
-            const selIds = rearrangeSelectedIdsRef.current;
-            const starts = crossDragStartRef.current;
-            crossDragStartRef.current = null;
-            if (!selIds.size || !rearrangeState || !starts) return;
-            // Clear outline transforms
-            for (const id of selIds) {
-              const el = document.querySelector(`[data-rearrange-section="${id}"]`) as HTMLElement | null;
-              if (el) el.style.transform = "";
-            }
-            if (committed) {
-              setRearrangeState(prev => {
-                if (!prev) return prev;
-                return {
-                  ...prev,
-                  sections: prev.sections.map(s => {
-                    const start = starts.get(s.id);
-                    if (!start) return s;
-                    return { ...s, currentRect: { ...s.currentRect, x: Math.max(0, start.x + dx), y: Math.max(0, start.y + dy) } };
-                  }),
-                };
-              });
-            }
-          }}
-        />
-      )}
-
-      {/* Rearrange overlay — always active alongside design overlay */}
-      {(isDesignMode || designOverlayExiting) && rearrangeState && (
-        <RearrangeOverlay
-          rearrangeState={rearrangeState}
-          onChange={setRearrangeState}
-          isDarkMode={isDarkMode}
-          exiting={designOverlayExiting}
-          blankCanvas={blankCanvas}
-          extraSnapRects={designPlacements.map(p => ({ x: p.x, y: p.y, width: p.width, height: p.height }))}
-          clearSignal={rearrangeClearSignal}
-          deselectSignal={rearrangeDeselectSignal}
-          onSelectionChange={(ids, isShift) => {
-            rearrangeSelectedIdsRef.current = ids;
-            if (!isShift) {
-              designSelectedIdsRef.current = new Set();
-              setDesignDeselectSignal(n => n + 1);
-            }
-          }}
-          onDragMove={(dx, dy) => {
-            // Move selected design placements by same delta
-            const selIds = designSelectedIdsRef.current;
-            if (!selIds.size) return;
-            // Cache start positions on first move
-            if (!crossDragStartRef.current) {
-              crossDragStartRef.current = new Map();
-              for (const p of designPlacements) {
-                if (selIds.has(p.id)) {
-                  crossDragStartRef.current.set(p.id, { x: p.x, y: p.y });
-                }
-              }
-            }
-            // Imperatively move placement divs
-            for (const id of selIds) {
-              const el = document.querySelector(`[data-design-placement="${id}"]`) as HTMLElement | null;
-              if (el) el.style.transform = `translate(${dx}px, ${dy}px)`;
-            }
-          }}
-          onDragEnd={(dx, dy, committed) => {
-            const selIds = designSelectedIdsRef.current;
-            const starts = crossDragStartRef.current;
-            crossDragStartRef.current = null;
-            if (!selIds.size || !starts) return;
-            // Clear transforms
-            for (const id of selIds) {
-              const el = document.querySelector(`[data-design-placement="${id}"]`) as HTMLElement | null;
-              if (el) el.style.transform = "";
-            }
-            if (committed) {
-              setDesignPlacements(prev => prev.map(p => {
-                const start = starts.get(p.id);
-                if (!start) return p;
-                return { ...p, x: Math.max(0, start.x + dx), y: Math.max(0, start.y + dy) };
-              }));
-            }
-          }}
-        />
-      )}
-
-      {/* Draw canvas — outside overlay so it can fade on toolbar close */}
-      <canvas
-        ref={drawCanvasRef}
-        className={`${styles.drawCanvas} ${isDrawMode ? styles.active : ""}`}
-        style={{ opacity: shouldShowMarkers ? 1 : 0, transition: "opacity 0.15s ease" }}
-        data-feedback-toolbar
-      />
-
-      {/* Markers layer - normal scrolling markers */}
-      <div className={styles.markersLayer} data-feedback-toolbar>
-        {markersVisible &&
-          visibleAnnotations
-            .filter((a) => !a.isFixed)
-            .map((annotation, layerIndex, arr) => (
-              <AnnotationMarker
-                key={annotation.id}
-                annotation={annotation}
-                globalIndex={visibleAnnotations.findIndex((a) => a.id === annotation.id)}
-                layerIndex={layerIndex}
-                layerSize={arr.length}
-                isExiting={markersExiting}
-                isClearing={isClearing}
-                isAnimated={animatedMarkers.has(annotation.id)}
-                isHovered={!markersExiting && hoveredMarkerId === annotation.id}
-                isDeleting={deletingMarkerId === annotation.id}
-                isEditingAny={!!editingAnnotation}
-                renumberFrom={renumberFrom}
-                markerClickBehavior={settings.markerClickBehavior}
-                tooltipStyle={getTooltipPosition(annotation)}
-                onHoverEnter={(a) =>
-                  !markersExiting &&
-                  a.id !== recentlyAddedIdRef.current &&
-                  handleMarkerHover(a)
-                }
-                onHoverLeave={() => handleMarkerHover(null)}
-                onClick={(a) =>
-                  settings.markerClickBehavior === "delete"
-                    ? deleteAnnotation(a.id)
-                    : startEditAnnotation(a)
-                }
-                onContextMenu={startEditAnnotation}
-              />
-            ))}
-        {markersVisible &&
-          !markersExiting &&
-          exitingAnnotationsList
-            .filter((a) => !a.isFixed)
-            .map((a) => <ExitingMarker key={a.id} annotation={a} />)}
-      </div>
-
-      {/* Fixed markers layer */}
-      <div className={styles.fixedMarkersLayer} data-feedback-toolbar>
-        {markersVisible &&
-          visibleAnnotations
-            .filter((a) => a.isFixed)
-            .map((annotation, layerIndex, arr) => (
-              <AnnotationMarker
-                key={annotation.id}
-                annotation={annotation}
-                globalIndex={visibleAnnotations.findIndex((a) => a.id === annotation.id)}
-                layerIndex={layerIndex}
-                layerSize={arr.length}
-                isExiting={markersExiting}
-                isClearing={isClearing}
-                isAnimated={animatedMarkers.has(annotation.id)}
-                isHovered={!markersExiting && hoveredMarkerId === annotation.id}
-                isDeleting={deletingMarkerId === annotation.id}
-                isEditingAny={!!editingAnnotation}
-                renumberFrom={renumberFrom}
-                markerClickBehavior={settings.markerClickBehavior}
-                tooltipStyle={getTooltipPosition(annotation)}
-                onHoverEnter={(a) =>
-                  !markersExiting &&
-                  a.id !== recentlyAddedIdRef.current &&
-                  handleMarkerHover(a)
-                }
-                onHoverLeave={() => handleMarkerHover(null)}
-                onClick={(a) =>
-                  settings.markerClickBehavior === "delete"
-                    ? deleteAnnotation(a.id)
-                    : startEditAnnotation(a)
-                }
-                onContextMenu={startEditAnnotation}
-              />
-            ))}
-        {markersVisible &&
-          !markersExiting &&
-          exitingAnnotationsList
-            .filter((a) => a.isFixed)
-            .map((a) => <ExitingMarker key={a.id} annotation={a} fixed />)}
-      </div>
-
-
-      {/* Interactive overlay */}
-      {isActive && (
-        <div
-          className={styles.overlay}
-          data-feedback-toolbar
+          data-agentation-toolbar
           style={
-            pendingAnnotation || editingAnnotation
-              ? { zIndex: 99999 }
+            toolbarPosition
+              ? {
+                  left: toolbarPosition.x,
+                  top: toolbarPosition.y,
+                  right: "auto",
+                  bottom: "auto",
+                }
               : undefined
           }
         >
-          {/* Hover highlight */}
-          {hoverInfo?.rect &&
-            !pendingAnnotation &&
-            !isScrolling &&
-            !isDragging && (
-              <div
-                className={`${styles.hoverHighlight} ${styles.enter}`}
-                style={{
-                  left: hoverInfo.rect.left,
-                  top: hoverInfo.rect.top,
-                  width: hoverInfo.rect.width,
-                  height: hoverInfo.rect.height,
-                  borderColor: "color-mix(in srgb, var(--agentation-color-accent) 50%, transparent)",
-                  backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 4%, transparent)",
-                }}
-              />
-            )}
-
-          {/* Cmd+shift+click multi-select highlights (during selection, before releasing modifiers) */}
-          {pendingMultiSelectElements
-            .filter((item) => document.contains(item.element))
-            .map((item, index) => {
-              const rect = item.element.getBoundingClientRect();
-              // Only show green if 2+ elements selected, otherwise use default blue
-              const isMulti = pendingMultiSelectElements.length > 1;
-              return (
-                <div
-                  key={index}
-                  className={
-                    isMulti
-                      ? styles.multiSelectOutline
-                      : styles.singleSelectOutline
+          {/* Morphing container */}
+          <div
+            data-toolbar-container
+            className={`${styles.toolbarContainer} ${isActive ? styles.expanded : styles.collapsed} ${showEntranceAnimation ? styles.entrance : ""} ${isToolbarHiding ? styles.hiding : ""} ${showMailFeedback ? styles.mailEnabled : ""} ${sendButtonVisible ? styles.serverConnected : ""}`}
+            onClick={
+              !isActive
+                ? (e) => {
+                    // Don't activate if we just finished dragging
+                    if (justFinishedToolbarDragRef.current) {
+                      justFinishedToolbarDragRef.current = false;
+                      e.preventDefault();
+                      return;
+                    }
+                    setIsActive(true);
                   }
-                  style={{
-                    position: "fixed",
-                    left: rect.left,
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                    ...(isMulti
-                      ? {}
-                      : {
-                          borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                          backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                        }),
-                  }}
-                />
-              );
-            })}
-
-          {/* Marker hover outline (shows bounding box of hovered annotation) */}
-          {hoveredMarkerId &&
-            !pendingAnnotation &&
-            (() => {
-              const hoveredAnnotation = annotations.find(
-                (a) => a.id === hoveredMarkerId,
-              );
-              if (!hoveredAnnotation?.boundingBox) return null;
-
-              // Render individual element boxes if available (cmd+shift+click multi-select)
-              if (hoveredAnnotation.elementBoundingBoxes?.length) {
-                // Use live positions from hoveredTargetElements when available
-                if (hoveredTargetElements.length > 0) {
-                  return hoveredTargetElements
-                    .filter((el) => document.contains(el))
-                    .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
-                      return (
-                        <div
-                          key={`hover-outline-live-${index}`}
-                          className={`${styles.multiSelectOutline} ${styles.enter}`}
-                          style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
-                          }}
-                        />
-                      );
-                    });
-                }
-                // Fallback to stored bounding boxes
-                return hoveredAnnotation.elementBoundingBoxes.map(
-                  (bb, index) => (
-                    <div
-                      key={`hover-outline-${index}`}
-                      className={`${styles.multiSelectOutline} ${styles.enter}`}
-                      style={{
-                        left: bb.x,
-                        top: bb.y - scrollY,
-                        width: bb.width,
-                        height: bb.height,
-                      }}
-                    />
-                  ),
-                );
-              }
-
-              // Single element: use live position from hoveredTargetElement when available
-              const rect =
-                hoveredTargetElement && document.contains(hoveredTargetElement)
-                  ? hoveredTargetElement.getBoundingClientRect()
-                  : null;
-
-              const bb = rect
-                ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-                : {
-                    x: hoveredAnnotation.boundingBox.x,
-                    y: hoveredAnnotation.isFixed
-                      ? hoveredAnnotation.boundingBox.y
-                      : hoveredAnnotation.boundingBox.y - scrollY,
-                    width: hoveredAnnotation.boundingBox.width,
-                    height: hoveredAnnotation.boundingBox.height,
-                  };
-
-              const isMulti = hoveredAnnotation.isMultiSelect;
-              return (
-                <div
-                  className={`${isMulti ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
-                  style={{
-                    left: bb.x,
-                    top: bb.y,
-                    width: bb.width,
-                    height: bb.height,
-                    ...(isMulti
-                      ? {}
-                      : {
-                          borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                          backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                        }),
-                  }}
-                />
-              );
-            })()}
-
-          {/* Hover tooltip */}
-          {hoverInfo && !pendingAnnotation && !isScrolling && !isDragging && (
+                : undefined
+            }
+            onMouseDown={handleToolbarMouseDown}
+            role={!isActive ? "button" : undefined}
+            tabIndex={!isActive ? 0 : -1}
+            title={!isActive ? "Start feedback mode" : undefined}
+          >
+            {/* Toggle content - visible when collapsed */}
             <div
-              className={`${styles.hoverTooltip} ${styles.enter}`}
-              style={{
-                left: Math.max(
-                  8,
-                  Math.min(hoverPosition.x, window.innerWidth - 100),
-                ),
-                top: Math.max(
-                  hoverPosition.y - (hoverInfo.reactComponents ? 48 : 32),
-                  8,
-                ),
-              }}
+              className={`${styles.toggleContent} ${!isActive ? styles.visible : styles.hidden}`}
             >
-              {hoverInfo.reactComponents && (
-                <div className={styles.hoverReactPath}>
-                  {hoverInfo.reactComponents}
+              <IconListSparkle size={24} />
+              {hasVisibleAnnotations && (
+                <span
+                  className={`${styles.badge} ${isActive ? styles.fadeOut : ""} ${showEntranceAnimation ? styles.entrance : ""}`}
+                >
+                  {visibleAnnotations.length}
+                </span>
+              )}
+            </div>
+
+            {/* Controls content - visible when expanded */}
+            <div
+              className={`${styles.controlsContent} ${isActive ? styles.visible : styles.hidden} ${
+                toolbarPosition && toolbarPosition.y < 100
+                  ? styles.tooltipBelow
+                  : ""
+              } ${tooltipsHidden || showMailPreview || showClearConfirm ? styles.tooltipsHidden : ""} ${tooltipSessionActive ? styles.tooltipsInSession : ""}`}
+              onMouseEnter={handleControlsMouseEnter}
+              onMouseLeave={handleControlsMouseLeave}
+            >
+              <div
+                className={`${styles.buttonWrapper} ${styles.mailButtonWrapper} ${showMailFeedback && isActive ? styles.mailButtonVisible : ""}`}
+              >
+                <button
+                  className={`${styles.controlButton} ${styles.sendPrimaryButton}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    hideTooltipsUntilMouseLeave();
+                    setShowClearConfirm(false);
+                    setShowMailPreview((open) => !open);
+                  }}
+                  data-active={showMailPreview}
+                  tabIndex={showMailFeedback ? 0 : -1}
+                >
+                  <IconSendArrow size={24} state="idle" />
+                </button>
+                <span className={styles.buttonTooltip}>Send feedback</span>
+              </div>
+
+              {/* Send button - only visible when webhook URL is available AND auto-send is off */}
+              <div
+                className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${sendButtonVisible ? styles.sendButtonVisible : ""}`}
+              >
+                <button
+                  className={`${styles.controlButton} ${styles.sendPrimaryButton} ${sendState === "sent" || sendState === "failed" ? styles.statusShowing : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    hideTooltipsUntilMouseLeave();
+                    sendToWebhook();
+                  }}
+                  disabled={
+                    !hasAnnotations ||
+                    !isValidUrl(configuredWebhookUrl) ||
+                    sendState === "sending"
+                  }
+                  data-no-hover={sendState === "sent" || sendState === "failed"}
+                  tabIndex={isValidUrl(configuredWebhookUrl) ? 0 : -1}
+                >
+                  <IconSendArrow size={24} state={sendState} />
+                </button>
+                <span className={styles.buttonTooltip}>
+                  Send feedback
+                  <span className={styles.shortcut}>S</span>
+                </span>
+              </div>
+
+              <div
+                className={`${styles.buttonWrapper} ${
+                  toolbarPosition && toolbarPosition.x < 120
+                    ? styles.buttonWrapperAlignLeft
+                    : ""
+                }`}
+              >
+                <button
+                  className={styles.controlButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    hideTooltipsUntilMouseLeave();
+                    toggleFreeze();
+                  }}
+                  data-active={isFrozen}
+                >
+                  <IconPausePlayAnimated size={24} isPaused={isFrozen} />
+                </button>
+                <span className={styles.buttonTooltip}>
+                  {isFrozen ? "Resume animations" : "Pause animations"}
+                  <span className={styles.shortcut}>P</span>
+                </span>
+              </div>
+
+              {enableCopy && (
+                <div className={styles.buttonWrapper}>
+                  <button
+                    className={`${styles.controlButton} ${copied ? styles.statusShowing : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      copyOutput();
+                    }}
+                    disabled={!hasAnnotations}
+                    data-active={copied}
+                  >
+                    <IconCopyAnimated size={24} copied={copied} />
+                  </button>
+                  <span className={styles.buttonTooltip}>
+                    Copy
+                    <span className={styles.shortcut}>C</span>
+                  </span>
                 </div>
               )}
-              <div className={styles.hoverElementName}>
-                {hoverInfo.elementName}
+
+              <div
+                className={`${styles.buttonWrapper} ${showClearConfirm ? styles.clearConfirmOpen : ""}`}
+                ref={clearConfirmRef}
+              >
+                {showClearConfirm && (
+                  <ClearConfirmPopover
+                    anchorRef={clearConfirmRef}
+                    onConfirm={confirmClearAll}
+                    onCancel={cancelClearAll}
+                  />
+                )}
+                <button
+                  className={styles.controlButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    hideTooltipsUntilMouseLeave();
+                    bumpActivity();
+                    if (showClearConfirm) {
+                      cancelClearAll();
+                      return;
+                    }
+                    requestClearAll();
+                  }}
+                  data-danger
+                  data-active={showClearConfirm}
+                >
+                  <IconTrashAlt size={24} />
+                </button>
+                <span className={styles.buttonTooltip}>
+                  Clear all
+                  <span className={styles.shortcut}>X</span>
+                </span>
+              </div>
+
+              <div
+                className={`${styles.buttonWrapper} ${
+                  toolbarPosition &&
+                  typeof window !== "undefined" &&
+                  toolbarPosition.x > window.innerWidth - 120
+                    ? styles.buttonWrapperAlignRight
+                    : ""
+                }`}
+              >
+                <button
+                  className={styles.controlButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    hideTooltipsUntilMouseLeave();
+                    deactivate();
+                  }}
+                >
+                  <IconXmarkLarge size={24} />
+                </button>
+                <span className={styles.buttonTooltip}>
+                  Exit
+                  <span className={styles.shortcut}>Esc</span>
+                </span>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Pending annotation marker + popup */}
-          {pendingAnnotation && (
-            <>
-              {/* Show element/area outline while adding annotation */}
-              {pendingAnnotation.multiSelectElements?.length
-                ? // Cmd+shift+click multi-select: show individual boxes with live positions
-                  pendingAnnotation.multiSelectElements
-                    .filter((el) => document.contains(el))
-                    .map((el, index) => {
-                      const rect = el.getBoundingClientRect();
-                      return (
-                        <div
-                          key={`pending-multi-${index}`}
-                          className={`${styles.multiSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
-                          style={{
-                            left: rect.left,
-                            top: rect.top,
-                            width: rect.width,
-                            height: rect.height,
-                          }}
-                        />
-                      );
-                    })
-                : // Single element or drag multi-select: show single box
-                  pendingAnnotation.targetElement &&
-                  document.contains(pendingAnnotation.targetElement)
+          {showMailPreviewVisible && showMailFeedback && (
+            <MailPreview
+              annotations={visibleAnnotations}
+              isVisible={showMailPreview}
+              hasDestination={hasMailDestination}
+              toolbarNearBottom={
+                !!toolbarPosition &&
+                typeof window !== "undefined" &&
+                toolbarPosition.y > window.innerHeight - 160
+              }
+              onClose={() => setShowMailPreview(false)}
+              onSend={handleSendFeedbackMail}
+              onRemoveAnnotation={deleteAnnotation}
+              onAnnotationHover={handleMarkerHover}
+            />
+          )}
+        </div>
+
+        {/* Markers layer - normal scrolling markers */}
+        <div className={styles.markersLayer} data-feedback-toolbar>
+          {markersVisible &&
+            visibleAnnotations
+              .filter((a) => !a.isFixed)
+              .map((annotation, layerIndex, arr) => (
+                <AnnotationMarker
+                  key={annotation.id}
+                  annotation={annotation}
+                  globalIndex={visibleAnnotations.findIndex(
+                    (a) => a.id === annotation.id,
+                  )}
+                  layerIndex={layerIndex}
+                  layerSize={arr.length}
+                  isExiting={markersExiting}
+                  isClearing={isClearing}
+                  isAnimated={animatedMarkers.has(annotation.id)}
+                  isHovered={
+                    !markersExiting && hoveredMarkerId === annotation.id
+                  }
+                  isDeleting={deletingMarkerId === annotation.id}
+                  isEditingAny={!!editingAnnotation}
+                  renumberFrom={renumberFrom}
+                  markerClickBehavior={settings.markerClickBehavior}
+                  tooltipStyle={getTooltipPosition(annotation)}
+                  onHoverEnter={(a) =>
+                    !markersExiting &&
+                    a.id !== recentlyAddedIdRef.current &&
+                    handleMarkerHover(a)
+                  }
+                  onHoverLeave={() => handleMarkerHover(null)}
+                  onClick={(a) =>
+                    settings.markerClickBehavior === "delete"
+                      ? deleteAnnotation(a.id)
+                      : startEditAnnotation(a)
+                  }
+                  onContextMenu={startEditAnnotation}
+                />
+              ))}
+          {markersVisible &&
+            !markersExiting &&
+            exitingAnnotationsList
+              .filter((a) => !a.isFixed)
+              .map((a) => <ExitingMarker key={a.id} annotation={a} />)}
+        </div>
+
+        {/* Fixed markers layer */}
+        <div className={styles.fixedMarkersLayer} data-feedback-toolbar>
+          {markersVisible &&
+            visibleAnnotations
+              .filter((a) => a.isFixed)
+              .map((annotation, layerIndex, arr) => (
+                <AnnotationMarker
+                  key={annotation.id}
+                  annotation={annotation}
+                  globalIndex={visibleAnnotations.findIndex(
+                    (a) => a.id === annotation.id,
+                  )}
+                  layerIndex={layerIndex}
+                  layerSize={arr.length}
+                  isExiting={markersExiting}
+                  isClearing={isClearing}
+                  isAnimated={animatedMarkers.has(annotation.id)}
+                  isHovered={
+                    !markersExiting && hoveredMarkerId === annotation.id
+                  }
+                  isDeleting={deletingMarkerId === annotation.id}
+                  isEditingAny={!!editingAnnotation}
+                  renumberFrom={renumberFrom}
+                  markerClickBehavior={settings.markerClickBehavior}
+                  tooltipStyle={getTooltipPosition(annotation)}
+                  onHoverEnter={(a) =>
+                    !markersExiting &&
+                    a.id !== recentlyAddedIdRef.current &&
+                    handleMarkerHover(a)
+                  }
+                  onHoverLeave={() => handleMarkerHover(null)}
+                  onClick={(a) =>
+                    settings.markerClickBehavior === "delete"
+                      ? deleteAnnotation(a.id)
+                      : startEditAnnotation(a)
+                  }
+                  onContextMenu={startEditAnnotation}
+                />
+              ))}
+          {markersVisible &&
+            !markersExiting &&
+            exitingAnnotationsList
+              .filter((a) => a.isFixed)
+              .map((a) => <ExitingMarker key={a.id} annotation={a} fixed />)}
+        </div>
+
+        {/* Interactive overlay */}
+        {isActive && (
+          <div
+            className={styles.overlay}
+            data-feedback-toolbar
+            style={
+              pendingAnnotation || editingAnnotation
+                ? { zIndex: 99999 }
+                : undefined
+            }
+          >
+            {/* Hover highlight */}
+            {hoverInfo?.rect &&
+              !pendingAnnotation &&
+              !isScrolling &&
+              !isDragging && (
+                <div
+                  className={`${styles.hoverHighlight} ${styles.enter}`}
+                  style={{
+                    left: hoverInfo.rect.left,
+                    top: hoverInfo.rect.top,
+                    width: hoverInfo.rect.width,
+                    height: hoverInfo.rect.height,
+                    borderColor:
+                      "color-mix(in srgb, var(--agentation-color-accent) 50%, transparent)",
+                    backgroundColor:
+                      "color-mix(in srgb, var(--agentation-color-accent) 4%, transparent)",
+                  }}
+                />
+              )}
+
+            {/* Cmd+shift+click multi-select highlights (during selection, before releasing modifiers) */}
+            {pendingMultiSelectElements
+              .filter((item) => document.contains(item.element))
+              .map((item, index) => {
+                const rect = item.element.getBoundingClientRect();
+                // Only show green if 2+ elements selected, otherwise use default blue
+                const isMulti = pendingMultiSelectElements.length > 1;
+                return (
+                  <div
+                    key={index}
+                    className={
+                      isMulti
+                        ? styles.multiSelectOutline
+                        : styles.singleSelectOutline
+                    }
+                    style={{
+                      position: "fixed",
+                      left: rect.left,
+                      top: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                      ...(isMulti
+                        ? {}
+                        : {
+                            borderColor:
+                              "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                            backgroundColor:
+                              "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                          }),
+                    }}
+                  />
+                );
+              })}
+
+            {/* Marker hover outline (shows bounding box of hovered annotation) */}
+            {hoveredMarkerId &&
+              !pendingAnnotation &&
+              (() => {
+                const hoveredAnnotation = annotations.find(
+                  (a) => a.id === hoveredMarkerId,
+                );
+                if (!hoveredAnnotation?.boundingBox) return null;
+
+                // Render individual element boxes if available (cmd+shift+click multi-select)
+                if (hoveredAnnotation.elementBoundingBoxes?.length) {
+                  // Use live positions from hoveredTargetElements when available
+                  if (hoveredTargetElements.length > 0) {
+                    return hoveredTargetElements
+                      .filter((el) => document.contains(el))
+                      .map((el, index) => {
+                        const rect = el.getBoundingClientRect();
+                        return (
+                          <div
+                            key={`hover-outline-live-${index}`}
+                            className={`${styles.multiSelectOutline} ${styles.enter}`}
+                            style={{
+                              left: rect.left,
+                              top: rect.top,
+                              width: rect.width,
+                              height: rect.height,
+                            }}
+                          />
+                        );
+                      });
+                  }
+                  // Fallback to stored bounding boxes
+                  return hoveredAnnotation.elementBoundingBoxes.map(
+                    (bb, index) => (
+                      <div
+                        key={`hover-outline-${index}`}
+                        className={`${styles.multiSelectOutline} ${styles.enter}`}
+                        style={{
+                          left: bb.x,
+                          top: bb.y - scrollY,
+                          width: bb.width,
+                          height: bb.height,
+                        }}
+                      />
+                    ),
+                  );
+                }
+
+                // Single element: use live position from hoveredTargetElement when available
+                const rect =
+                  hoveredTargetElement &&
+                  document.contains(hoveredTargetElement)
+                    ? hoveredTargetElement.getBoundingClientRect()
+                    : null;
+
+                const bb = rect
+                  ? {
+                      x: rect.left,
+                      y: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                    }
+                  : {
+                      x: hoveredAnnotation.boundingBox.x,
+                      y: hoveredAnnotation.isFixed
+                        ? hoveredAnnotation.boundingBox.y
+                        : hoveredAnnotation.boundingBox.y - scrollY,
+                      width: hoveredAnnotation.boundingBox.width,
+                      height: hoveredAnnotation.boundingBox.height,
+                    };
+
+                const isMulti = hoveredAnnotation.isMultiSelect;
+                return (
+                  <div
+                    className={`${isMulti ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
+                    style={{
+                      left: bb.x,
+                      top: bb.y,
+                      width: bb.width,
+                      height: bb.height,
+                      ...(isMulti
+                        ? {}
+                        : {
+                            borderColor:
+                              "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                            backgroundColor:
+                              "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                          }),
+                    }}
+                  />
+                );
+              })()}
+
+            {/* Hover tooltip */}
+            {hoverInfo && !pendingAnnotation && !isScrolling && !isDragging && (
+              <div
+                className={`${styles.hoverTooltip} ${styles.enter}`}
+                style={{
+                  left: Math.max(
+                    8,
+                    Math.min(hoverPosition.x, window.innerWidth - 100),
+                  ),
+                  top: Math.max(
+                    hoverPosition.y - (hoverInfo.reactComponents ? 48 : 32),
+                    8,
+                  ),
+                }}
+              >
+                {hoverInfo.reactComponents && (
+                  <div className={styles.hoverReactPath}>
+                    {hoverInfo.reactComponents}
+                  </div>
+                )}
+                <div className={styles.hoverElementName}>
+                  {hoverInfo.elementName}
+                </div>
+              </div>
+            )}
+
+            {/* Pending annotation marker + popup */}
+            {pendingAnnotation && (
+              <>
+                {/* Show element/area outline while adding annotation */}
+                {pendingAnnotation.multiSelectElements?.length
+                  ? // Cmd+shift+click multi-select: show individual boxes with live positions
+                    pendingAnnotation.multiSelectElements
+                      .filter((el) => document.contains(el))
+                      .map((el, index) => {
+                        const rect = el.getBoundingClientRect();
+                        return (
+                          <div
+                            key={`pending-multi-${index}`}
+                            className={`${styles.multiSelectOutline} ${pendingExiting ? styles.exit : styles.enter}`}
+                            style={{
+                              left: rect.left,
+                              top: rect.top,
+                              width: rect.width,
+                              height: rect.height,
+                            }}
+                          />
+                        );
+                      })
+                  : // Single element or drag multi-select: show single box
+                    pendingAnnotation.targetElement &&
+                      document.contains(pendingAnnotation.targetElement)
                     ? // Single-click: use live getBoundingClientRect for consistent positioning
                       (() => {
                         const rect =
@@ -4475,8 +3699,10 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                               top: rect.top,
                               width: rect.width,
                               height: rect.height,
-                              borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                              backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                              borderColor:
+                                "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                              backgroundColor:
+                                "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
                             }}
                           />
                         );
@@ -4493,215 +3719,225 @@ const [settings, setSettings] = useState<ToolbarSettings>(() => {
                             ...(pendingAnnotation.isMultiSelect
                               ? {}
                               : {
-                                  borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                                  backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                  borderColor:
+                                    "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                  backgroundColor:
+                                    "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
                                 }),
                           }}
                         />
                       )}
 
-              {(() => {
-                // Use stored coordinates - they match what will be saved
-                const markerX = pendingAnnotation.x;
-                const markerY = pendingAnnotation.isFixed
-                  ? pendingAnnotation.y
-                  : pendingAnnotation.y - scrollY;
+                {(() => {
+                  // Use stored coordinates - they match what will be saved
+                  const markerX = pendingAnnotation.x;
+                  const markerY = pendingAnnotation.isFixed
+                    ? pendingAnnotation.y
+                    : pendingAnnotation.y - scrollY;
 
-                return (
-                  <>
-                    <PendingMarker
-                      x={markerX}
-                      y={markerY}
-                      isMultiSelect={pendingAnnotation.isMultiSelect}
-                      isExiting={pendingExiting}
-                    />
+                  return (
+                    <>
+                      <PendingMarker
+                        x={markerX}
+                        y={markerY}
+                        isMultiSelect={pendingAnnotation.isMultiSelect}
+                        isExiting={pendingExiting}
+                      />
 
-                    <AnnotationPopupCSS
-                      ref={popupRef}
-                      element={pendingAnnotation.element}
-                      selectedText={pendingAnnotation.selectedText}
-                      computedStyles={pendingAnnotation.computedStylesObj}
-                      placeholder={
-                        pendingAnnotation.element === "Area selection"
-                          ? "What's confusing about this area?"
-                          : pendingAnnotation.isMultiSelect
-                            ? "What's confusing about these elements?"
-                            : "What's confusing?"
-                      }
-                      onSubmit={addAnnotation}
-                      onCancel={cancelAnnotation}
-                      isExiting={pendingExiting}
-                      lightMode={!isDarkMode}
-                      accentColor={
-                        pendingAnnotation.isMultiSelect
-                          ? "var(--agentation-color-green)"
-                          : "var(--agentation-color-accent)"
-                      }
-                      style={{
-                        // Popup is 280px wide, centered with translateX(-50%), so 140px each side
-                        // Clamp so popup stays 20px from viewport edges
-                        left: Math.max(
-                          160,
-                          Math.min(
-                            window.innerWidth - 160,
-                            (markerX / 100) * window.innerWidth,
-                          ),
-                        ),
-                        // Position popup above or below marker to keep marker visible
-                        ...(markerY > window.innerHeight - 290
-                          ? { bottom: window.innerHeight - markerY + 20 }
-                          : { top: markerY + 20 }),
-                      }}
-                    />
-                  </>
-                );
-              })()}
-            </>
-          )}
-
-          {/* Edit annotation popup */}
-          {editingAnnotation && (
-            <>
-              {/* Show element/area outline while editing */}
-              {editingAnnotation.elementBoundingBoxes?.length
-                ? // Cmd+shift+click: show individual element boxes (use live rects when available)
-                  (() => {
-                    // Use live positions from editingTargetElements when available
-                    if (editingTargetElements.length > 0) {
-                      return editingTargetElements
-                        .filter((el) => document.contains(el))
-                        .map((el, index) => {
-                          const rect = el.getBoundingClientRect();
-                          return (
-                            <div
-                              key={`edit-multi-live-${index}`}
-                              className={`${styles.multiSelectOutline} ${styles.enter}`}
-                              style={{
-                                left: rect.left,
-                                top: rect.top,
-                                width: rect.width,
-                                height: rect.height,
-                              }}
-                            />
-                          );
-                        });
-                    }
-                    // Fallback to stored bounding boxes
-                    return editingAnnotation.elementBoundingBoxes!.map(
-                      (bb, index) => (
-                        <div
-                          key={`edit-multi-${index}`}
-                          className={`${styles.multiSelectOutline} ${styles.enter}`}
-                          style={{
-                            left: bb.x,
-                            top: bb.y - scrollY,
-                            width: bb.width,
-                            height: bb.height,
-                          }}
-                        />
-                      ),
-                    );
-                  })()
-                : // Single element or drag multi-select: show single box
-                  (() => {
-                    // Use live position from editingTargetElement when available
-                    const rect =
-                      editingTargetElement &&
-                      document.contains(editingTargetElement)
-                        ? editingTargetElement.getBoundingClientRect()
-                        : null;
-
-                    const bb = rect
-                      ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height }
-                      : editingAnnotation.boundingBox
-                        ? {
-                            x: editingAnnotation.boundingBox.x,
-                            y: editingAnnotation.isFixed
-                              ? editingAnnotation.boundingBox.y
-                              : editingAnnotation.boundingBox.y - scrollY,
-                            width: editingAnnotation.boundingBox.width,
-                            height: editingAnnotation.boundingBox.height,
-                          }
-                        : null;
-
-                    if (!bb) return null;
-
-                    return (
-                      <div
-                        className={`${editingAnnotation.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
+                      <AnnotationPopupCSS
+                        ref={popupRef}
+                        element={pendingAnnotation.element}
+                        selectedText={pendingAnnotation.selectedText}
+                        computedStyles={pendingAnnotation.computedStylesObj}
+                        placeholder={
+                          pendingAnnotation.element === "Area selection"
+                            ? "What's confusing about this area?"
+                            : pendingAnnotation.isMultiSelect
+                              ? "What's confusing about these elements?"
+                              : "What's confusing?"
+                        }
+                        onSubmit={addAnnotation}
+                        onCancel={cancelAnnotation}
+                        isExiting={pendingExiting}
+                        lightMode={!isDarkMode}
+                        accentColor={
+                          pendingAnnotation.isMultiSelect
+                            ? "var(--agentation-color-green)"
+                            : "var(--agentation-color-accent)"
+                        }
                         style={{
-                          left: bb.x,
-                          top: bb.y,
-                          width: bb.width,
-                          height: bb.height,
-                          ...(editingAnnotation.isMultiSelect
-                            ? {}
-                            : {
-                                borderColor: "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
-                                backgroundColor: "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
-                              }),
+                          // Popup is 280px wide, centered with translateX(-50%), so 140px each side
+                          // Clamp so popup stays 20px from viewport edges
+                          left: Math.max(
+                            160,
+                            Math.min(
+                              window.innerWidth - 160,
+                              (markerX / 100) * window.innerWidth,
+                            ),
+                          ),
+                          // Position popup above or below marker to keep marker visible
+                          ...(markerY > window.innerHeight - 290
+                            ? { bottom: window.innerHeight - markerY + 20 }
+                            : { top: markerY + 20 }),
                         }}
                       />
-                    );
-                  })()}
-
-              <AnnotationPopupCSS
-                ref={editPopupRef}
-                element={editingAnnotation.element}
-                selectedText={editingAnnotation.selectedText}
-                computedStyles={parseComputedStylesString(
-                  editingAnnotation.computedStyles,
-                )}
-                placeholder="Edit your note..."
-                initialValue={editingAnnotation.comment}
-                submitLabel="Save"
-                onSubmit={updateAnnotation}
-                onCancel={cancelEditAnnotation}
-                onDelete={() => deleteAnnotation(editingAnnotation.id)}
-                isExiting={editExiting}
-                lightMode={!isDarkMode}
-                accentColor={
-                  editingAnnotation.isMultiSelect
-                    ? "var(--agentation-color-green)"
-                    : "var(--agentation-color-accent)"
-                }
-                style={(() => {
-                  const markerY = editingAnnotation.isFixed
-                    ? editingAnnotation.y
-                    : editingAnnotation.y - scrollY;
-                  return {
-                    // Popup is 280px wide, centered with translateX(-50%), so 140px each side
-                    // Clamp so popup stays 20px from viewport edges
-                    left: Math.max(
-                      160,
-                      Math.min(
-                        window.innerWidth - 160,
-                        (editingAnnotation.x / 100) * window.innerWidth,
-                      ),
-                    ),
-                    // Position popup above or below marker to keep marker visible
-                    ...(markerY > window.innerHeight - 290
-                      ? { bottom: window.innerHeight - markerY + 20 }
-                      : { top: markerY + 20 }),
-                  };
+                    </>
+                  );
                 })()}
-              />
-            </>
-          )}
+              </>
+            )}
 
-          {/* Drag selection - all visuals use refs for smooth 60fps */}
-          {isDragging && (
-            <>
-              <div ref={dragRectRef} className={styles.dragSelection} />
-              <div
-                ref={highlightsContainerRef}
-                className={styles.highlightsContainer}
-              />
-            </>
-          )}
-        </div>
-      )}
-    </div>,
+            {/* Edit annotation popup */}
+            {editingAnnotation && (
+              <>
+                {/* Show element/area outline while editing */}
+                {editingAnnotation.elementBoundingBoxes?.length
+                  ? // Cmd+shift+click: show individual element boxes (use live rects when available)
+                    (() => {
+                      // Use live positions from editingTargetElements when available
+                      if (editingTargetElements.length > 0) {
+                        return editingTargetElements
+                          .filter((el) => document.contains(el))
+                          .map((el, index) => {
+                            const rect = el.getBoundingClientRect();
+                            return (
+                              <div
+                                key={`edit-multi-live-${index}`}
+                                className={`${styles.multiSelectOutline} ${styles.enter}`}
+                                style={{
+                                  left: rect.left,
+                                  top: rect.top,
+                                  width: rect.width,
+                                  height: rect.height,
+                                }}
+                              />
+                            );
+                          });
+                      }
+                      // Fallback to stored bounding boxes
+                      return editingAnnotation.elementBoundingBoxes!.map(
+                        (bb, index) => (
+                          <div
+                            key={`edit-multi-${index}`}
+                            className={`${styles.multiSelectOutline} ${styles.enter}`}
+                            style={{
+                              left: bb.x,
+                              top: bb.y - scrollY,
+                              width: bb.width,
+                              height: bb.height,
+                            }}
+                          />
+                        ),
+                      );
+                    })()
+                  : // Single element or drag multi-select: show single box
+                    (() => {
+                      // Use live position from editingTargetElement when available
+                      const rect =
+                        editingTargetElement &&
+                        document.contains(editingTargetElement)
+                          ? editingTargetElement.getBoundingClientRect()
+                          : null;
+
+                      const bb = rect
+                        ? {
+                            x: rect.left,
+                            y: rect.top,
+                            width: rect.width,
+                            height: rect.height,
+                          }
+                        : editingAnnotation.boundingBox
+                          ? {
+                              x: editingAnnotation.boundingBox.x,
+                              y: editingAnnotation.isFixed
+                                ? editingAnnotation.boundingBox.y
+                                : editingAnnotation.boundingBox.y - scrollY,
+                              width: editingAnnotation.boundingBox.width,
+                              height: editingAnnotation.boundingBox.height,
+                            }
+                          : null;
+
+                      if (!bb) return null;
+
+                      return (
+                        <div
+                          className={`${editingAnnotation.isMultiSelect ? styles.multiSelectOutline : styles.singleSelectOutline} ${styles.enter}`}
+                          style={{
+                            left: bb.x,
+                            top: bb.y,
+                            width: bb.width,
+                            height: bb.height,
+                            ...(editingAnnotation.isMultiSelect
+                              ? {}
+                              : {
+                                  borderColor:
+                                    "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                  backgroundColor:
+                                    "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                }),
+                          }}
+                        />
+                      );
+                    })()}
+
+                <AnnotationPopupCSS
+                  ref={editPopupRef}
+                  element={editingAnnotation.element}
+                  selectedText={editingAnnotation.selectedText}
+                  computedStyles={parseComputedStylesString(
+                    editingAnnotation.computedStyles,
+                  )}
+                  placeholder="Edit your note..."
+                  initialValue={editingAnnotation.comment}
+                  submitLabel="Save"
+                  onSubmit={updateAnnotation}
+                  onCancel={cancelEditAnnotation}
+                  onDelete={() => deleteAnnotation(editingAnnotation.id)}
+                  isExiting={editExiting}
+                  lightMode={!isDarkMode}
+                  accentColor={
+                    editingAnnotation.isMultiSelect
+                      ? "var(--agentation-color-green)"
+                      : "var(--agentation-color-accent)"
+                  }
+                  style={(() => {
+                    const markerY = editingAnnotation.isFixed
+                      ? editingAnnotation.y
+                      : editingAnnotation.y - scrollY;
+                    return {
+                      // Popup is 280px wide, centered with translateX(-50%), so 140px each side
+                      // Clamp so popup stays 20px from viewport edges
+                      left: Math.max(
+                        160,
+                        Math.min(
+                          window.innerWidth - 160,
+                          (editingAnnotation.x / 100) * window.innerWidth,
+                        ),
+                      ),
+                      // Position popup above or below marker to keep marker visible
+                      ...(markerY > window.innerHeight - 290
+                        ? { bottom: window.innerHeight - markerY + 20 }
+                        : { top: markerY + 20 }),
+                    };
+                  })()}
+                />
+              </>
+            )}
+
+            {/* Drag selection - all visuals use refs for smooth 60fps */}
+            {isDragging && (
+              <>
+                <div ref={dragRectRef} className={styles.dragSelection} />
+                <div
+                  ref={highlightsContainerRef}
+                  className={styles.highlightsContainer}
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </ShadowRoot>,
     document.body,
   );
 }

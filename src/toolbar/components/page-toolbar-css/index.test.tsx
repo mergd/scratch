@@ -65,6 +65,20 @@ describe("PageFeedbackToolbarCSS", () => {
     });
   });
 
+  describe("enableCopy prop", () => {
+    it("should accept enableCopy={false} without errors", () => {
+      expect(() =>
+        render(<PageFeedbackToolbarCSS enableCopy={false} />)
+      ).not.toThrow();
+    });
+
+    it("should accept enableCopy={true} without errors", () => {
+      expect(() =>
+        render(<PageFeedbackToolbarCSS enableCopy={true} />)
+      ).not.toThrow();
+    });
+  });
+
   describe("combined props", () => {
     it("should accept both onAnnotationAdd and copyToClipboard props", () => {
       const handleAnnotation = vi.fn();

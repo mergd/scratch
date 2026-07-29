@@ -24,7 +24,19 @@ import { AgentationFeedback } from '@fldr/agentation';
 
 Props like `onSubmit`, `copyToClipboard`, `webhookUrl`, etc. are forwarded to the toolbar.
 
-Also exported: `Agentation` (always-visible toolbar) and `useCircleGesture`.
+### Mail-back feedback
+
+When the user opens the mail icon and confirms send, Agentation delivers to every configured destination:
+
+| Prop | Role |
+| --- | --- |
+| `feedbackUrl` | `POST` JSON `FeedbackMailPayload` (full `url` / `pathname` / `origin` / `title`, `context`, `annotations`, `markdown`, `sentAt`) |
+| `webhookUrl` | Also `POST`s the same payload on mail confirm (in addition to existing webhook events) |
+| `mailto` | `true` or an email address — opens a `mailto:` summary after HTTP posts |
+| `feedbackContext` | Merged into payload as `context` (user id, plan, etc.) |
+| `enableMailFeedback` | Force show/hide; defaults to on when any destination above is set |
+
+Also exported: `Agentation` (always-visible toolbar), `FeedbackMailPayload`, and `useCircleGesture`.
 
 ## Playground
 
@@ -33,4 +45,4 @@ bun install
 bun run demo
 ```
 
-Opens a local page for trying circle / keyboard unlock and annotations.
+Opens a local page with `feedbackUrl="/api/feedback"`. Annotate → mail icon → Send; the last JSON payload appears on the page.

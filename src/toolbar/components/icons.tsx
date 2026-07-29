@@ -1,5 +1,6 @@
 "use client";
 
+import { PaperPlaneTilt } from "@phosphor-icons/react";
 import s from "./icon-transitions.module.scss";
 
 // =============================================================================
@@ -263,19 +264,29 @@ export const IconSendArrow = ({
   const isSending = state === "sending";
 
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Send arrow */}
-      <g
+    <span
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        width: size,
+        height: size,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <span
         className={`${s.iconStateFast} ${showArrow ? s.visibleScaled : isSending ? s.sending : s.hiddenScaled}`}
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
-        <path
-          d="M9.875 14.125L12.3506 19.6951C12.7184 20.5227 13.9091 20.4741 14.2083 19.6193L18.8139 6.46032C19.0907 5.6695 18.3305 4.90933 17.5397 5.18611L4.38072 9.79174C3.52589 10.0909 3.47731 11.2816 4.30494 11.6494L9.875 14.125ZM9.875 14.125L13.375 10.625"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </g>
+        <PaperPlaneTilt size={size} weight="regular" aria-hidden />
+      </span>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
       {/* Green checkmark circle */}
       <g
         className={`${s.iconStateFast} ${showCheck ? s.visibleScaled : s.hiddenScaled}`}
@@ -321,7 +332,8 @@ export const IconSendArrow = ({
           strokeWidth="1"
         />
       </g>
-    </svg>
+      </svg>
+    </span>
   );
 };
 
@@ -588,6 +600,24 @@ export const IconPlayAlt = ({ size = 16 }: { size?: number }) => (
       d="M17.75 10.701C18.75 11.2783 18.75 12.7217 17.75 13.299L8.75 18.4952C7.75 19.0725 6.5 18.3509 6.5 17.1962L6.5 6.80384C6.5 5.64914 7.75 4.92746 8.75 5.50481L17.75 10.701Z"
       stroke="currentColor"
       strokeWidth="1.5"
+    />
+  </svg>
+);
+
+// Envelope / mail icon
+export const IconMail = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <path
+      d="M4.75 7.75C4.75 6.7835 5.5335 6 6.5 6H17.5C18.4665 6 19.25 6.7835 19.25 7.75V16.25C19.25 17.2165 18.4665 18 17.5 18H6.5C5.5335 18 4.75 17.2165 4.75 16.25V7.75Z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    <path
+      d="M5.5 7.5L11.3848 12.1914C11.7453 12.4787 12.2547 12.4787 12.6152 12.1914L18.5 7.5"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );

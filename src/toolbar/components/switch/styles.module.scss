@@ -15,11 +15,11 @@
     background-color: #484848;
   }
 
-  &:has(.switchInput:checked) {
+  &[data-checked] {
     background-color: var(--agentation-color-blue);
   }
 
-  &:has(.switchInput:disabled) {
+  &[data-disabled] {
     opacity: 0.3;
   }
 }
@@ -44,7 +44,7 @@
   background-color: #fff;
   transition: transform 0.15s;
 
-  .switchContainer:has(.switchInput:checked) & {
+  .switchContainer[data-checked] & {
     transform: translateX(8px);
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { originalSetTimeout } from "../../utils/freeze-animations";
+import { useShadowRoot } from "../../utils/use-shadow-root";
 
 export const Tooltip = ({
   content,
@@ -16,6 +17,9 @@ export const Tooltip = ({
   const triggerRef = useRef<HTMLSpanElement>(null);
   const timeoutRef = useRef<ReturnType<typeof originalSetTimeout> | null>(null);
   const exitTimeoutRef = useRef<ReturnType<typeof originalSetTimeout> | null>(null);
+  const shadowRoot = useShadowRoot(triggerRef);
+  const portalTarget =
+    shadowRoot instanceof ShadowRoot ? shadowRoot : document.body;
 
   const updatePosition = () => {
     if (triggerRef.current) {
@@ -95,7 +99,7 @@ export const Tooltip = ({
           >
             {content}
           </div>,
-          document.body
+          portalTarget,
         )}
     </>
   );

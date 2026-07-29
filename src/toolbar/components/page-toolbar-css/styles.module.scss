@@ -176,7 +176,7 @@
   position: fixed;
   bottom: 1.25rem;
   right: 1.25rem;
-  width: 337px;
+  width: fit-content;
   z-index: 100000;
   font-family:
     system-ui,
@@ -202,6 +202,7 @@
 
 .toolbarContainer {
   position: relative;
+  -webkit-user-select: none;
   user-select: none;
   margin-left: auto;
   align-self: flex-end;
@@ -252,13 +253,10 @@
 
   &.expanded {
     height: 44px;
-    border-radius: 1.5rem;
-    padding: 0.375rem;
-    width: 297px;
-
-    &.serverConnected {
-      width: 337px;
-    }
+    border-radius: 1.25rem;
+    // Compact footprint via padding/gaps — keep 34px hit targets for 24px icons
+    padding: 0.2rem;
+    width: fit-content;
   }
 }
 
@@ -284,7 +282,7 @@
 .controlsContent {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.125rem;
   transition:
     filter 0.8s cubic-bezier(0.19, 1, 0.22, 1),
     opacity 0.8s cubic-bezier(0.19, 1, 0.22, 1),
@@ -310,6 +308,7 @@
   position: absolute;
   top: -13px;
   right: -13px;
+  -webkit-user-select: none;
   user-select: none;
   min-width: 18px;
   height: 18px;
@@ -590,12 +589,12 @@
   transition-delay: 0s;
 }
 
-.sendButtonWrapper {
+.sendButtonWrapper,
+.mailButtonWrapper {
   width: 0;
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
-  margin-left: -0.375rem;
   transition:
     width 0.4s cubic-bezier(0.19, 1, 0.22, 1),
     opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1),
@@ -606,16 +605,57 @@
     transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
   }
 
-  &.sendButtonVisible {
-    width: 34px;
+  &.sendButtonVisible,
+  &.mailButtonVisible {
+    width: 44px;
     opacity: 1;
     overflow: visible;
     pointer-events: auto;
-    margin-left: 0;
 
     .controlButton {
       transform: scale(1);
     }
+  }
+
+  &.sendButtonVisible:first-child,
+  &.mailButtonVisible:first-child {
+    margin-left: -0.2rem;
+  }
+}
+
+.sendPrimaryButton {
+  width: 44px;
+  height: 44px;
+  background: var(--agentation-color-accent);
+  color: #fff;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+
+  &:hover:not(:disabled):not([data-active="true"]) {
+    background: color-mix(
+      in srgb,
+      var(--agentation-color-accent) 88%,
+      #fff
+    );
+    color: #fff;
+  }
+
+  &:active:not(:disabled) {
+    background: color-mix(
+      in srgb,
+      var(--agentation-color-accent) 78%,
+      #000
+    );
+  }
+
+  &[data-active="true"] {
+    background: color-mix(
+      in srgb,
+      var(--agentation-color-accent) 78%,
+      #000
+    );
+    color: #fff;
   }
 }
 
@@ -651,6 +691,122 @@
     height: 8px;
     background: #1a1a1a;
     border-radius: 0 0 2px 0;
+  }
+}
+
+.clearConfirmOpen {
+  z-index: 2;
+}
+
+.clearConfirm {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 168px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #1a1a1a;
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  z-index: 100002;
+  animation: scaleIn 0.15s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: calc(100% - 4px);
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 8px;
+    height: 8px;
+    background: #1a1a1a;
+    border-radius: 0 0 2px 0;
+  }
+
+  &.clearConfirmFixed {
+    position: fixed;
+    bottom: auto;
+    transform: none;
+
+    &::after {
+      left: var(--clear-confirm-arrow-left, 50%);
+      transform: translateX(-50%) rotate(45deg);
+    }
+  }
+}
+
+.clearConfirmBelow {
+  &::after {
+    top: calc(-4px);
+    border-radius: 2px 0 0 0;
+  }
+
+  &:not(.clearConfirmFixed) {
+    bottom: auto;
+    top: calc(100% + 12px);
+  }
+}
+
+.clearConfirmAlignRight {
+  left: auto;
+  right: 0;
+  transform: none;
+
+  &::after {
+    left: auto;
+    right: 14px;
+    transform: rotate(45deg);
+  }
+}
+
+.clearConfirmText {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.clearConfirmActions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.clearConfirmCancel,
+.clearConfirmConfirm {
+  appearance: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.clearConfirmCancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
+}
+
+.clearConfirmConfirm {
+  background: var(--agentation-color-red);
+  color: #fff;
+
+  &:hover {
+    background: color-mix(in srgb, var(--agentation-color-red) 88%, #fff);
   }
 }
 
@@ -744,7 +900,7 @@
   width: 1px;
   height: 12px;
   background: rgba(255, 255, 255, 0.15);
-  margin: 0 0.125rem;
+  margin: 0;
 }
 
 // =============================================================================
@@ -918,6 +1074,7 @@
   box-shadow:
     0 2px 6px rgba(0, 0, 0, 0.2),
     inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+  -webkit-user-select: none;
   user-select: none;
   will-change: transform, opacity;
   contain: layout style;
@@ -1116,8 +1273,6 @@
   .cycleButton,
   .cycleDot,
   .dropdownButton,
-  .toggleLabel,
-  .customCheckbox,
   .sliderLabel,
   .slider,
   .themeToggle {
@@ -1169,10 +1324,6 @@
         background: rgba(255, 255, 255, 0.15);
         color: #fff;
       }
-    }
-
-    .toggleLabel {
-      color: rgba(255, 255, 255, 0.85);
     }
   }
 }
@@ -1580,11 +1731,6 @@
       color: rgba(0, 0, 0, 0.2);
     }
   }
-
-  .toggleSwitch {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
 }
 
 @keyframes cycleTextIn {
@@ -1877,122 +2023,6 @@
   }
 }
 
-.customCheckbox {
-  position: relative;
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition:
-    background-color 0.25s ease,
-    border-color 0.25s ease;
-
-  svg {
-    color: #1a1a1a;
-    opacity: 1;
-    transition: opacity 0.15s ease;
-  }
-
-  input[type="checkbox"]:checked + & {
-    border-color: rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 1);
-  }
-
-  // Light mode variant (unchecked state)
-  [data-agentation-theme="light"] & {
-    border: 1px solid rgba(0, 0, 0, 0.15);
-    background: #fff;
-
-    // Checked state in light mode
-    &.checked {
-      border-color: #1a1a1a;
-      background: #1a1a1a;
-
-      svg {
-        color: #fff;
-      }
-    }
-  }
-}
-
-.toggleLabel {
-  font-size: 0.8125rem;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.5);
-  letter-spacing: -0.0094em;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-
-  [data-agentation-theme="light"] & {
-    color: rgba(0, 0, 0, 0.5);
-  }
-}
-
-// iOS-style toggle switch
-.toggleSwitch {
-  position: relative;
-  display: inline-block;
-  width: 24px;
-  height: 16px;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition:
-    background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-
-  input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  input:checked + .toggleSlider {
-    background-color: var(--agentation-color-blue);
-  }
-
-  input:checked + .toggleSlider::before {
-    transform: translateX(8px);
-  }
-
-  &.disabled {
-    opacity: 0.4;
-
-    .toggleSlider {
-      cursor: not-allowed;
-    }
-  }
-}
-
-.toggleSlider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  border-radius: 16px;
-  background: #484848; // Dark mode unchecked
-
-  [data-agentation-theme="light"] & {
-    background: #dddddd; // Light mode unchecked
-  }
-
-  &::before {
-    content: "";
-    position: absolute;
-    height: 12px;
-    width: 12px;
-    left: 2px;
-    bottom: 2px;
-    background: white;
-    border-radius: 50%;
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-}
-
 // MCP Status Dot
 @keyframes mcpPulse {
   0% {
@@ -2048,27 +2078,6 @@
   &.disconnected {
     background-color: var(--agentation-color-red);
     animation: mcpPulseError 2s infinite;
-  }
-}
-
-// =============================================================================
-// Draw Canvas
-// =============================================================================
-
-.drawCanvas {
-  position: fixed;
-  inset: 0;
-  z-index: 99996; // Below markers (99998) and overlay (99997)
-  // !important needed to override .overlay > * { pointer-events: auto }
-  pointer-events: none !important;
-
-  &.active {
-    pointer-events: auto !important;
-    cursor: crosshair !important;
-
-    &[data-stroke-hover] {
-      cursor: pointer !important;
-    }
   }
 }
 
