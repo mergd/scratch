@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Cookie } from '@phosphor-icons/react';
-import { AgentationFeedback } from '@fldr/agentation';
+import { ScratchFeedback } from '@fldr/scratch';
 import {
   ConfigForm,
   type PlaygroundConfig,
@@ -8,7 +8,7 @@ import {
 import { CodeViewer, JsonViewer } from './components/json-viewer';
 
 function resetGuideCookie() {
-  document.cookie = 'fldr_agentation_hide_guide=; path=/; max-age=0';
+  document.cookie = 'fldr_scratch_hide_guide=; path=/; max-age=0';
   window.location.reload();
 }
 
@@ -104,7 +104,7 @@ export function App() {
       return `  ${key}={${serialized}}`;
     });
 
-    return `<AgentationFeedback\n${lines.join('\n')}\n/>`;
+    return `<ScratchFeedback\n${lines.join('\n')}\n/>`;
   }, [config, feedbackContext, guide, resolvedIdleTimeoutMs]);
 
   const updateConfig = <K extends keyof PlaygroundConfig>(
@@ -117,7 +117,7 @@ export function App() {
   return (
     <div className="page">
       <main>
-        <p className="eyebrow">@fldr/agentation</p>
+        <p className="eyebrow">@fldr/scratch</p>
         <h1>Playground</h1>
         <p className="lede">
           Unlock feedback with three circles on the page or{' '}
@@ -187,7 +187,7 @@ export function App() {
         </section>
       </main>
 
-      <AgentationFeedback
+      <ScratchFeedback
         key={config.isDevelopment ? 'dev' : 'prod'}
         isDevelopment={config.isDevelopment}
         idleTimeoutMs={resolvedIdleTimeoutMs}

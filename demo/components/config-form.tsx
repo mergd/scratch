@@ -3,7 +3,7 @@ import { Collapsible } from '@base-ui/react/collapsible';
 import { Input } from '@base-ui/react/input';
 import { Select } from '@base-ui/react/select';
 import { CaretDown, CaretRight } from '@phosphor-icons/react';
-import { COLOR_OPTIONS, type AnnotationColorId } from '@fldr/agentation';
+import { COLOR_OPTIONS, type AnnotationColorId } from '@fldr/scratch';
 
 export type PlaygroundConfig = {
   primaryColor: AnnotationColorId;

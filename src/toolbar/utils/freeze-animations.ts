@@ -11,7 +11,7 @@
 // Patches are installed as a side effect of importing this module.
 // =============================================================================
 
-// Exclude selectors — agentation UI elements should never be frozen
+// Exclude selectors — scratch UI elements should never be frozen
 const EXCLUDE_ATTRS = [
   "data-feedback-toolbar",
   "data-feedback-guide",
@@ -23,7 +23,7 @@ const NOT_SELECTORS = EXCLUDE_ATTRS
   .join("");
 
 const STYLE_ID = "feedback-freeze-styles";
-const STATE_KEY = "__agentation_freeze";
+const STATE_KEY = "__scratch_freeze";
 
 // ---------------------------------------------------------------------------
 // Shared mutable state on window (survives HMR module re-execution)
@@ -150,7 +150,7 @@ export const originalRequestAnimationFrame = _s.origRAF;
 // Freeze / Unfreeze
 // ---------------------------------------------------------------------------
 
-function isAgentationElement(el: Element | null): boolean {
+function isScratchElement(el: Element | null): boolean {
   if (!el) return false;
   return EXCLUDE_ATTRS.some((attr) => !!el.closest?.(`[${attr}]`));
 }
@@ -178,14 +178,14 @@ export function freeze(): void {
   `;
   document.head.appendChild(style);
 
-  // WAAPI — pause only RUNNING non-agentation animations and store references
+  // WAAPI — pause only RUNNING non-scratch animations and store references
   // (pausing finished animations would restart them on play(), breaking entrance anims)
   _s.pausedAnimations = [];
   try {
     document.getAnimations().forEach((anim) => {
       if (anim.playState !== "running") return;
       const target = (anim.effect as KeyframeEffect)?.target as Element | null;
-      if (!isAgentationElement(target)) {
+      if (!isScratchElement(target)) {
         anim.pause();
         _s.pausedAnimations.push(anim);
       }
@@ -224,7 +224,7 @@ export function unfreeze(): void {
       try {
         cb();
       } catch (e) {
-        console.warn("[agentation] Error replaying queued timeout:", e);
+        console.warn("[scratch] Error replaying queued timeout:", e);
       }
     }, 0);
   }
@@ -249,7 +249,7 @@ export function unfreeze(): void {
     try {
       anim.play();
     } catch (e) {
-      console.warn("[agentation] Error resuming animation:", e);
+      console.warn("[scratch] Error resuming animation:", e);
     }
   }
   _s.pausedAnimations = [];

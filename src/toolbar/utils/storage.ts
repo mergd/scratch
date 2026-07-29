@@ -141,7 +141,7 @@ export function clearSyncMarkers(pathname: string): void {
 // Session Storage
 // =============================================================================
 
-const SESSION_PREFIX = "agentation-session-";
+const SESSION_PREFIX = "scratch-session-";
 
 export function getSessionStorageKey(pathname: string): string {
   return `${SESSION_PREFIX}${pathname}`;

@@ -270,25 +270,25 @@ export const COLOR_OPTIONS = [
 
 export type AnnotationColorId = (typeof COLOR_OPTIONS)[number]["id"];
 
-const agentationColorTokensCss = [
+const scratchColorTokensCss = [
   ...COLOR_OPTIONS.map(
     (c) => `
-    [data-agentation-accent="${c.id}"] {
-      --agentation-color-accent: ${c.srgb};
+    [data-scratch-accent="${c.id}"] {
+      --scratch-color-accent: ${c.srgb};
     }
     @supports (color: color(display-p3 0 0 0)) {
-      [data-agentation-accent="${c.id}"] {
-        --agentation-color-accent: ${c.p3};
+      [data-scratch-accent="${c.id}"] {
+        --scratch-color-accent: ${c.p3};
       }
     }
   `,
   ),
   `:host {
-    ${COLOR_OPTIONS.map((c) => `--agentation-color-${c.id}: ${c.srgb};`).join("\n")}
+    ${COLOR_OPTIONS.map((c) => `--scratch-color-${c.id}: ${c.srgb};`).join("\n")}
   }`,
   `@supports (color: color(display-p3 0 0 0)) {
     :host {
-      ${COLOR_OPTIONS.map((c) => `--agentation-color-${c.id}: ${c.p3};`).join("\n")}
+      ${COLOR_OPTIONS.map((c) => `--scratch-color-${c.id}: ${c.p3};`).join("\n")}
     }
   }`,
 ].join("");
@@ -426,7 +426,7 @@ export type PageFeedbackToolbarCSSProps = {
 };
 
 /** Alias for PageFeedbackToolbarCSSProps */
-export type AgentationProps = PageFeedbackToolbarCSSProps;
+export type ScratchProps = PageFeedbackToolbarCSSProps;
 
 // =============================================================================
 // Component
@@ -899,7 +899,7 @@ export function PageFeedbackToolbarCSS({
                   return result.value;
                 }
                 console.warn(
-                  "[Agentation] Failed to sync annotation:",
+                  "[Scratch] Failed to sync annotation:",
                   result.reason,
                 );
                 return localToMerge[i];
@@ -929,7 +929,7 @@ export function PageFeedbackToolbarCSS({
           } catch (joinError) {
             // Session doesn't exist or expired - will create new below
             console.warn(
-              "[Agentation] Could not join session, creating new:",
+              "[Scratch] Could not join session, creating new:",
               joinError,
             );
             // Clear the stored session ID since it's invalid
@@ -990,7 +990,7 @@ export function PageFeedbackToolbarCSS({
                       return result.value;
                     }
                     console.warn(
-                      "[Agentation] Failed to sync annotation:",
+                      "[Scratch] Failed to sync annotation:",
                       result.reason,
                     );
                     return unsyncedAnnotations[i];
@@ -1020,7 +1020,7 @@ export function PageFeedbackToolbarCSS({
                   }
                 } catch (err) {
                   console.warn(
-                    `[Agentation] Failed to sync annotations for ${pagePath}:`,
+                    `[Scratch] Failed to sync annotations for ${pagePath}:`,
                     err,
                   );
                 }
@@ -1034,7 +1034,7 @@ export function PageFeedbackToolbarCSS({
         // Network error - continue in local-only mode
         setConnectionStatus("disconnected");
         console.warn(
-          "[Agentation] Failed to initialize session, using local storage:",
+          "[Scratch] Failed to initialize session, using local storage:",
           error,
         );
       }
@@ -1172,7 +1172,7 @@ export function PageFeedbackToolbarCSS({
                 return result.value;
               }
               console.warn(
-                "[Agentation] Failed to sync annotation on reconnect:",
+                "[Scratch] Failed to sync annotation on reconnect:",
                 result.reason,
               );
               return unsyncedLocal[i];
@@ -1191,7 +1191,7 @@ export function PageFeedbackToolbarCSS({
             );
           }
         } catch (err) {
-          console.warn("[Agentation] Failed to sync on reconnect:", err);
+          console.warn("[Scratch] Failed to sync on reconnect:", err);
         }
       };
 
@@ -1526,18 +1526,18 @@ export function PageFeedbackToolbarCSS({
       "[contenteditable]",
     ].join(", ");
 
-    const notAgentationSelector = `:not([data-agentation-root]):not([data-agentation-root] *)`;
+    const notScratchSelector = `:not([data-scratch-root]):not([data-scratch-root] *)`;
 
     const style = document.createElement("style");
     style.id = "feedback-cursor-styles";
     // Text elements get text cursor (higher specificity with body prefix)
     // Everything else gets crosshair
     style.textContent = `
-      body ${notAgentationSelector} {
+      body ${notScratchSelector} {
         cursor: crosshair !important;
       }
 
-      body :is(${textElementsSelector})${notAgentationSelector} {
+      body :is(${textElementsSelector})${notScratchSelector} {
         cursor: text !important;
       }
     `;
@@ -2304,7 +2304,7 @@ export function PageFeedbackToolbarCSS({
         });
         return response.ok;
       } catch (error) {
-        console.warn("[Agentation] Webhook failed:", error);
+        console.warn("[Scratch] Webhook failed:", error);
         return false;
       }
     },
@@ -2397,7 +2397,7 @@ export function PageFeedbackToolbarCSS({
             }
           })
           .catch((error) => {
-            console.warn("[Agentation] Failed to sync annotation:", error);
+            console.warn("[Scratch] Failed to sync annotation:", error);
           });
       }
     },
@@ -2455,7 +2455,7 @@ export function PageFeedbackToolbarCSS({
       if (endpoint) {
         deleteAnnotationFromServer(endpoint, id).catch((error) => {
           console.warn(
-            "[Agentation] Failed to delete annotation from server:",
+            "[Scratch] Failed to delete annotation from server:",
             error,
           );
         });
@@ -2504,7 +2504,7 @@ export function PageFeedbackToolbarCSS({
         const el = allEls.find(
           (e) =>
             !e.closest("[data-annotation-marker]") &&
-            !e.closest("[data-agentation-root]"),
+            !e.closest("[data-scratch-root]"),
         ) as HTMLElement | undefined;
         if (el) elements.push(el);
       }
@@ -2564,7 +2564,7 @@ export function PageFeedbackToolbarCSS({
           comment: newComment,
         }).catch((error) => {
           console.warn(
-            "[Agentation] Failed to update annotation on server:",
+            "[Scratch] Failed to update annotation on server:",
             error,
           );
         });
@@ -2775,7 +2775,7 @@ export function PageFeedbackToolbarCSS({
             });
             return response.ok;
           } catch (error) {
-            console.warn("[Agentation] Feedback POST failed:", error);
+            console.warn("[Scratch] Feedback POST failed:", error);
             return false;
           }
         }),
@@ -2889,7 +2889,7 @@ export function PageFeedbackToolbarCSS({
       if (
         !isDragHandle &&
         (target.closest("button") ||
-          target.closest("[data-agentation-mail-preview]"))
+          target.closest("[data-scratch-mail-preview]"))
       ) {
         return;
       }
@@ -3152,24 +3152,24 @@ export function PageFeedbackToolbarCSS({
   };
 
   return createPortal(
-    <ShadowRoot host="agentation-toolbar" style={{ display: "contents" }}>
+    <ShadowRoot host="scratch-toolbar" style={{ display: "contents" }}>
       <style>
         {shadowCss}
-        {agentationColorTokensCss}
+        {scratchColorTokensCss}
       </style>
       <div
         ref={portalWrapperRef}
         style={{ display: "contents" }}
-        data-agentation-theme={isDarkMode ? "dark" : "light"}
-        data-agentation-accent={settings.annotationColorId}
-        data-agentation-root=""
+        data-scratch-theme={isDarkMode ? "dark" : "light"}
+        data-scratch-accent={settings.annotationColorId}
+        data-scratch-root=""
       >
         {/* Toolbar */}
         <div
           ref={toolbarRef}
           className={`${styles.toolbar}${userClassName ? ` ${userClassName}` : ""}`}
           data-feedback-toolbar
-          data-agentation-toolbar
+          data-scratch-toolbar
           style={
             toolbarPosition
               ? {
@@ -3522,9 +3522,9 @@ export function PageFeedbackToolbarCSS({
                     width: hoverInfo.rect.width,
                     height: hoverInfo.rect.height,
                     borderColor:
-                      "color-mix(in srgb, var(--agentation-color-accent) 50%, transparent)",
+                      "color-mix(in srgb, var(--scratch-color-accent) 50%, transparent)",
                     backgroundColor:
-                      "color-mix(in srgb, var(--agentation-color-accent) 4%, transparent)",
+                      "color-mix(in srgb, var(--scratch-color-accent) 4%, transparent)",
                   }}
                 />
               )}
@@ -3554,9 +3554,9 @@ export function PageFeedbackToolbarCSS({
                         ? {}
                         : {
                             borderColor:
-                              "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                              "color-mix(in srgb, var(--scratch-color-accent) 60%, transparent)",
                             backgroundColor:
-                              "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                              "color-mix(in srgb, var(--scratch-color-accent) 5%, transparent)",
                           }),
                     }}
                   />
@@ -3647,9 +3647,9 @@ export function PageFeedbackToolbarCSS({
                         ? {}
                         : {
                             borderColor:
-                              "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                              "color-mix(in srgb, var(--scratch-color-accent) 60%, transparent)",
                             backgroundColor:
-                              "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                              "color-mix(in srgb, var(--scratch-color-accent) 5%, transparent)",
                           }),
                     }}
                   />
@@ -3721,9 +3721,9 @@ export function PageFeedbackToolbarCSS({
                               width: rect.width,
                               height: rect.height,
                               borderColor:
-                                "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                "color-mix(in srgb, var(--scratch-color-accent) 60%, transparent)",
                               backgroundColor:
-                                "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                "color-mix(in srgb, var(--scratch-color-accent) 5%, transparent)",
                             }}
                           />
                         );
@@ -3741,9 +3741,9 @@ export function PageFeedbackToolbarCSS({
                               ? {}
                               : {
                                   borderColor:
-                                    "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                    "color-mix(in srgb, var(--scratch-color-accent) 60%, transparent)",
                                   backgroundColor:
-                                    "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                    "color-mix(in srgb, var(--scratch-color-accent) 5%, transparent)",
                                 }),
                           }}
                         />
@@ -3783,8 +3783,8 @@ export function PageFeedbackToolbarCSS({
                         lightMode={!isDarkMode}
                         accentColor={
                           pendingAnnotation.isMultiSelect
-                            ? "var(--agentation-color-green)"
-                            : "var(--agentation-color-accent)"
+                            ? "var(--scratch-color-green)"
+                            : "var(--scratch-color-accent)"
                         }
                         style={{
                           // Popup is 280px wide, centered with translateX(-50%), so 140px each side
@@ -3892,9 +3892,9 @@ export function PageFeedbackToolbarCSS({
                               ? {}
                               : {
                                   borderColor:
-                                    "color-mix(in srgb, var(--agentation-color-accent) 60%, transparent)",
+                                    "color-mix(in srgb, var(--scratch-color-accent) 60%, transparent)",
                                   backgroundColor:
-                                    "color-mix(in srgb, var(--agentation-color-accent) 5%, transparent)",
+                                    "color-mix(in srgb, var(--scratch-color-accent) 5%, transparent)",
                                 }),
                           }}
                         />
@@ -3918,8 +3918,8 @@ export function PageFeedbackToolbarCSS({
                   lightMode={!isDarkMode}
                   accentColor={
                     editingAnnotation.isMultiSelect
-                      ? "var(--agentation-color-green)"
-                      : "var(--agentation-color-accent)"
+                      ? "var(--scratch-color-green)"
+                      : "var(--scratch-color-accent)"
                   }
                   style={(() => {
                     const markerY = editingAnnotation.isFixed

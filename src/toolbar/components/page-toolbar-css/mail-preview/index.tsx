@@ -105,7 +105,7 @@ export function MailPreview({
     >
       <div
         className={`${styles.mailPreview} ${isVisible ? styles.enter : styles.exit} ${showingThanks ? styles.mailPreviewThanks : ""}`}
-        data-agentation-mail-preview
+        data-scratch-mail-preview
         role="dialog"
         aria-label="Send feedback"
       >
@@ -175,12 +175,12 @@ export function MailPreview({
               <div className={styles.messageField}>
                 <label
                   className={styles.messageLabel}
-                  htmlFor="agentation-feedback-message"
+                  htmlFor="scratch-feedback-message"
                 >
                   Anything else?
                 </label>
                 <textarea
-                  id="agentation-feedback-message"
+                  id="scratch-feedback-message"
                   className={styles.messageInput}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}

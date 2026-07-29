@@ -4,7 +4,7 @@ import { ShadowRoot } from "./toolbar/components/shadow-root";
 import { css as resetCss } from "./toolbar/components/reset.scss";
 import styles, { css as guideCss } from "./feedback-guide.module.scss";
 
-const COOKIE_NAME = "fldr_agentation_hide_guide";
+const COOKIE_NAME = "fldr_scratch_hide_guide";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 year
 
 const shadowCss = [resetCss, guideCss].join("\n");
@@ -115,7 +115,7 @@ export function FeedbackGuide({
 
   return createPortal(
     <ShadowRoot
-      host="agentation-feedback-guide"
+      host="scratch-feedback-guide"
       data-feedback-guide=""
       style={{ display: "contents" }}
     >

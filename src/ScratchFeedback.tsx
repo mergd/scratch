@@ -5,7 +5,7 @@ import {
   useState,
   type ComponentProps,
 } from 'react';
-import { Agentation, COLOR_OPTIONS, type AnnotationColorId } from './toolbar';
+import { Scratch, COLOR_OPTIONS, type AnnotationColorId } from './toolbar';
 import {
   FeedbackGuide,
   shouldShowFeedbackGuide,
@@ -16,7 +16,7 @@ import { useCircleGesture } from './use-circle-gesture';
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 
 /**
- * Keyboard shortcut that unlocks AgentationFeedback in production.
+ * Keyboard shortcut that unlocks ScratchFeedback in production.
  * Defaults to Cmd/Ctrl+Shift+U (`code: "KeyU"` with metaOrCtrl + shift).
  */
 export type ActivationKeybinding = {
@@ -60,7 +60,7 @@ function matchesActivationKeybinding(
   return true;
 }
 
-export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
+export type ScratchFeedbackProps = ComponentProps<typeof Scratch> & {
   /**
    * When true, the toolbar starts visible (typical for local dev).
    * Defaults to false — unlock via three circles or the activation keybinding.
@@ -98,14 +98,14 @@ export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
  *
  * On unlock, shows a short guide once (persisted in a cookie after any dismiss).
  */
-export function AgentationFeedback({
+export function ScratchFeedback({
   isDevelopment = false,
   idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
   activationKeybinding = DEFAULT_ACTIVATION_KEYBINDING,
   guide,
   primaryColor,
-  ...agentationProps
-}: AgentationFeedbackProps) {
+  ...scratchProps
+}: ScratchFeedbackProps) {
   const [active, setActive] = useState(isDevelopment);
   const [guideOpen, setGuideOpen] = useState(
     () => isDevelopment && shouldShowFeedbackGuide(),
@@ -212,8 +212,8 @@ export function AgentationFeedback({
 
   return (
     <>
-      <Agentation
-        {...agentationProps}
+      <Scratch
+        {...scratchProps}
         primaryColor={primaryColor}
         startActive
         onRequestClose={dismiss}

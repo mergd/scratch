@@ -56,9 +56,9 @@ function findCaptureTarget(
 
   for (const el of elements) {
     if (!(el instanceof HTMLElement)) continue;
-    // Skip agentation UI
-    if (el.hasAttribute("data-agentation-root")) continue;
-    if (el.closest?.("[data-agentation-root]")) continue;
+    // Skip scratch UI
+    if (el.hasAttribute("data-scratch-root")) continue;
+    if (el.closest?.("[data-scratch-root]")) continue;
     if (el.tagName === "CANVAS") continue;
     // Skip html/body — we want something more specific
     if (el === document.documentElement || el === document.body) continue;
@@ -117,10 +117,10 @@ export async function captureDomRegion(
   const outH = Math.round(captureH * outScale);
   if (outW < 1 || outH < 1) return null;
 
-  // Hide agentation UI so it doesn't appear in the capture
-  const agentationRoot = document.querySelector("[data-agentation-root]") as HTMLElement | null;
-  const prevVisibility = agentationRoot?.style.visibility;
-  if (agentationRoot) agentationRoot.style.visibility = "hidden";
+  // Hide scratch UI so it doesn't appear in the capture
+  const scratchRoot = document.querySelector("[data-scratch-root]") as HTMLElement | null;
+  const prevVisibility = scratchRoot?.style.visibility;
+  if (scratchRoot) scratchRoot.style.visibility = "hidden";
 
   try {
     const target = findCaptureTarget(captureX, captureY, captureW, captureH);
@@ -175,11 +175,11 @@ export async function captureDomRegion(
 
     return canvas.toDataURL("image/jpeg", quality);
   } catch (err) {
-    console.warn("[Agentation] DOM capture failed:", err);
+    console.warn("[Scratch] DOM capture failed:", err);
     return null;
   } finally {
-    // Always restore agentation UI
-    if (agentationRoot) agentationRoot.style.visibility = prevVisibility ?? "";
+    // Always restore scratch UI
+    if (scratchRoot) scratchRoot.style.visibility = prevVisibility ?? "";
   }
 }
 
@@ -229,7 +229,7 @@ export function captureDrawingStrokes(
 
     return canvas.toDataURL("image/png");
   } catch (err) {
-    console.warn("[Agentation] Stroke capture failed:", err);
+    console.warn("[Scratch] Stroke capture failed:", err);
     return null;
   }
 }

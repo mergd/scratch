@@ -1,9 +1,9 @@
 export {
-  Agentation,
+  Scratch,
   PageFeedbackToolbarCSS,
   AnnotationPopupCSS,
   COLOR_OPTIONS,
-  type AgentationProps,
+  type ScratchProps,
   type AnnotationColorId,
   type DemoAnnotation,
   type FeedbackMailPayload,
@@ -24,10 +24,10 @@ export {
 } from './toolbar';
 export * from './toolbar/components/icons';
 export {
-  AgentationFeedback,
+  ScratchFeedback,
   type ActivationKeybinding,
-  type AgentationFeedbackProps,
-} from './AgentationFeedback';
+  type ScratchFeedbackProps,
+} from './ScratchFeedback';
 export {
   FeedbackGuide,
   shouldShowFeedbackGuide,

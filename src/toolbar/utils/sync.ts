@@ -2,7 +2,7 @@
 // Server Sync Utilities
 // =============================================================================
 //
-// Optional server synchronization for the Agentation protocol.
+// Optional server synchronization for the Scratch protocol.
 // When an endpoint is provided, annotations sync to a server.
 // Falls back gracefully to local-only mode on network errors.
 //

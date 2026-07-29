@@ -53,8 +53,8 @@ export function AnnotationMarker({
   const isMulti = annotation.isMultiSelect;
 
   const markerColor = isMulti
-    ? "var(--agentation-color-green)"
-    : "var(--agentation-color-accent)";
+    ? "var(--scratch-color-green)"
+    : "var(--scratch-color-accent)";
 
   const animClass = isExiting
     ? styles.exit
@@ -155,8 +155,8 @@ export function PendingMarker({
         left: `${x}%`,
         top: y,
         backgroundColor: isMultiSelect
-          ? "var(--agentation-color-green)"
-          : "var(--agentation-color-accent)",
+          ? "var(--scratch-color-green)"
+          : "var(--scratch-color-accent)",
       }}
     >
       <IconPlus size={12} />

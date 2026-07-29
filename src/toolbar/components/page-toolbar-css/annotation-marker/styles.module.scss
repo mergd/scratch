@@ -46,7 +46,7 @@
   position: absolute;
   width: 22px;
   height: 22px;
-  background: var(--agentation-color-blue);
+  background: var(--scratch-color-blue);
   color: white;
   border-radius: 50%;
   display: flex;
@@ -96,7 +96,7 @@
 
   &.pending {
     position: fixed;
-    background-color: var(--agentation-color-blue);
+    background-color: var(--scratch-color-blue);
     cursor: default;
   }
 
@@ -105,19 +105,19 @@
   }
 
   &.multiSelect {
-    background-color: var(--agentation-color-green);
+    background-color: var(--scratch-color-green);
     width: 26px;
     height: 26px;
     border-radius: 6px;
     font-size: 0.75rem;
 
     &.pending {
-      background-color: var(--agentation-color-green);
+      background-color: var(--scratch-color-green);
     }
   }
 
   &.hovered {
-    background-color: var(--agentation-color-red);
+    background-color: var(--scratch-color-red);
   }
 }
 
@@ -182,7 +182,7 @@
 }
 
 // Light mode overrides
-[data-agentation-theme="light"] {
+[data-scratch-theme="light"] {
   .markerTooltip {
     background: #fff;
     box-shadow:

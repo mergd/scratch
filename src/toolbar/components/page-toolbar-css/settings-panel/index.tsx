@@ -32,12 +32,12 @@ export function SettingsPanel({
           ? { bottom: "auto", top: "calc(100% + 0.5rem)" }
           : undefined
       }
-      data-agentation-settings-panel
+      data-scratch-settings-panel
     >
       <div className={styles.settingsPanelContainer}>
         <div className={styles.settingsPage}>
           <div className={styles.settingsHeader}>
-            <span className={styles.settingsBrand}>@fldr/agentation</span>
+            <span className={styles.settingsBrand}>@fldr/scratch</span>
             <p className={styles.settingsVersion}>v{__VERSION__}</p>
             <button
               className={styles.themeToggle}

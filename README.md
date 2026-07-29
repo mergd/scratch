@@ -1,32 +1,32 @@
-# @fldr/agentation
+# @fldr/scratch
 
 User feedback toolbar for apps — mark what's confusing. Always on in development; in production, unlock by drawing **three circles** or pressing **Cmd/Ctrl+Shift+U**.
 
-Forked from [Agentation](https://github.com/benjitaylor/agentation) (see `NOTICE` / `UPSTREAM_LICENSE`). Dom context is still captured for developers and coding agents.
+Heavily inspired by / derived from [Agentation](https://github.com/benjitaylor/agentation) by Benji Taylor (see `NOTICE` / `UPSTREAM_LICENSE`). Dom context is still captured for developers and coding agents.
 
 ## Install
 
 ```bash
-npm i @fldr/agentation
+npm i @fldr/scratch
 ```
 
 ## Usage
 
 ```tsx
-import { AgentationFeedback } from '@fldr/agentation';
+import { ScratchFeedback } from '@fldr/scratch';
 
 // Vite
-<AgentationFeedback isDevelopment={import.meta.env.DEV} />
+<ScratchFeedback isDevelopment={import.meta.env.DEV} />
 
 // Next.js
-<AgentationFeedback isDevelopment={process.env.NODE_ENV === 'development'} />
+<ScratchFeedback isDevelopment={process.env.NODE_ENV === 'development'} />
 ```
 
 Props like `onSubmit`, `copyToClipboard`, `webhookUrl`, etc. are forwarded to the toolbar.
 
 ### Mail-back feedback
 
-When the user opens the mail icon and confirms send, Agentation delivers to every configured destination:
+When the user opens the mail icon and confirms send, Scratch delivers to every configured destination:
 
 | Prop | Role |
 | --- | --- |
@@ -36,7 +36,7 @@ When the user opens the mail icon and confirms send, Agentation delivers to ever
 | `feedbackContext` | Merged into payload as `context` (user id, plan, etc.) |
 | `enableMailFeedback` | Force show/hide; defaults to on when any destination above is set |
 
-Also exported: `Agentation` (always-visible toolbar), `FeedbackMailPayload`, and `useCircleGesture`.
+Also exported: `Scratch` (always-visible toolbar), `FeedbackMailPayload`, and `useCircleGesture`.
 
 ## Playground
 

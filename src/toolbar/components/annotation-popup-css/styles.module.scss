@@ -2,7 +2,7 @@
 // Uses CSS animations for all transitions
 
 // Protect stroke-based icons from host page `svg { fill: currentColor }` rules.
-// Scoped to agentation's own containers to avoid breaking host SVGs that use
+// Scoped to scratch's own containers to avoid breaking host SVGs that use
 // fill="none" with CSS-based fills (e.g. Tailwind's fill-current).
 // See: https://github.com/benjitaylor/agentation/issues/58
 .popup {
@@ -247,11 +247,11 @@
   transition: border-color 0.15s ease;
 
   &:focus {
-    border-color: var(--agentation-color-blue);
+    border-color: var(--scratch-color-blue);
   }
 
   &.green:focus {
-    border-color: var(--agentation-color-green);
+    border-color: var(--scratch-color-green);
   }
 
   &::placeholder {
@@ -343,10 +343,10 @@
   &:hover {
     background-color: color-mix(
       in srgb,
-      var(--agentation-color-red) 25%,
+      var(--scratch-color-red) 25%,
       transparent
     );
-    color: var(--agentation-color-red);
+    color: var(--scratch-color-red);
   }
 
   &:active {
@@ -428,10 +428,10 @@
     &:hover {
       background-color: color-mix(
         in srgb,
-        var(--agentation-color-red) 25%,
+        var(--scratch-color-red) 25%,
         transparent
       );
-      color: var(--agentation-color-red);
+      color: var(--scratch-color-red);
     }
   }
 }

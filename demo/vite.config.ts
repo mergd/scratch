@@ -133,7 +133,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@fldr/agentation': path.resolve(root, '../src/index.ts'),
+      '@fldr/scratch': path.resolve(root, '../src/index.ts'),
     },
   },
   server: {

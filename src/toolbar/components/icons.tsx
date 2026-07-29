@@ -234,14 +234,14 @@ export const IconCopyAnimated = ({
     >
       <path
         d="M12 20C7.58172 20 4 16.4182 4 12C4 7.58172 7.58172 4 12 4C16.4182 4 20 7.58172 20 12C20 16.4182 16.4182 20 12 20Z"
-        stroke="var(--agentation-color-green)"
+        stroke="var(--scratch-color-green)"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
         d="M15 10L11 14.25L9.25 12.25"
-        stroke="var(--agentation-color-green)"
+        stroke="var(--scratch-color-green)"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -293,14 +293,14 @@ export const IconSendArrow = ({
       >
         <path
           d="M12 20C7.58172 20 4 16.4182 4 12C4 7.58172 7.58172 4 12 4C16.4182 4 20 7.58172 20 12C20 16.4182 16.4182 20 12 20Z"
-          stroke="var(--agentation-color-green)"
+          stroke="var(--scratch-color-green)"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
           d="M15 10L11 14.25L9.25 12.25"
-          stroke="var(--agentation-color-green)"
+          stroke="var(--scratch-color-green)"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -312,14 +312,14 @@ export const IconSendArrow = ({
       >
         <path
           d="M12 20C7.58172 20 4 16.4182 4 12C4 7.58172 7.58172 4 12 4C16.4182 4 20 7.58172 20 12C20 16.4182 16.4182 20 12 20Z"
-          stroke="var(--agentation-color-red)"
+          stroke="var(--scratch-color-red)"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
           d="M12 8V12"
-          stroke="var(--agentation-color-red)"
+          stroke="var(--scratch-color-red)"
           strokeWidth="1.5"
           strokeLinecap="round"
         />
@@ -327,8 +327,8 @@ export const IconSendArrow = ({
           cx="12"
           cy="15"
           r="0.5"
-          fill="var(--agentation-color-red)"
-          stroke="var(--agentation-color-red)"
+          fill="var(--scratch-color-red)"
+          stroke="var(--scratch-color-red)"
           strokeWidth="1"
         />
       </g>

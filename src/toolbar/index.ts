@@ -1,23 +1,23 @@
 // =============================================================================
-// Agentation
+// Scratch
 // =============================================================================
 //
 // A floating toolbar for collecting structured user feedback on web apps.
 // End users mark what's confusing; developers/agents still get DOM context.
 //
 // Usage:
-//   import { Agentation } from '@fldr/agentation';
-//   <Agentation />
+//   import { Scratch } from '@fldr/scratch';
+//   <Scratch />
 //
 // =============================================================================
 
 // Main components
 // CSS-only version (default - zero runtime deps)
-export { PageFeedbackToolbarCSS as Agentation } from "./components/page-toolbar-css";
+export { PageFeedbackToolbarCSS as Scratch } from "./components/page-toolbar-css";
 export { PageFeedbackToolbarCSS, COLOR_OPTIONS } from "./components/page-toolbar-css";
 export type {
   DemoAnnotation,
-  AgentationProps,
+  ScratchProps,
   AnnotationColorId,
   FeedbackMailPayload,
 } from "./components/page-toolbar-css";
