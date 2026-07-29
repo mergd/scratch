@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Annotation } from "../../../types";
 import { IconClose, IconSendArrow, IconXmark } from "../../icons";
 import styles from "./styles.module.scss";
@@ -24,11 +24,15 @@ export type MailPreviewProps = {
   onClose: () => void;
   /** Deliver to all configured destinations. Returns true on success. */
   onSend: (message?: string) => Promise<boolean>;
+  /** After the short thanks beat — clear annotations (parent closes panel). */
+  onSendSuccess: () => void;
   onRemoveAnnotation: (id: string) => void;
   onAnnotationHover: (annotation: Annotation | null) => void;
 };
 
 type SendStatus = "idle" | "sending" | "sent" | "error";
+
+const THANKS_MS = 1300;
 
 export function MailPreview({
   annotations,
@@ -37,15 +41,18 @@ export function MailPreview({
   hasDestination,
   onClose,
   onSend,
+  onSendSuccess,
   onRemoveAnnotation,
   onAnnotationHover,
 }: MailPreviewProps) {
   const [status, setStatus] = useState<SendStatus>("idle");
   const [message, setMessage] = useState("");
+  const thanksTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAnnotations = annotations.length > 0;
   const hasMessage = message.trim().length > 0;
   const hasFeedback = hasAnnotations || hasMessage;
   const canSend = hasFeedback && hasDestination;
+  const showingThanks = status === "sent";
 
   useEffect(() => {
     if (!isVisible) {
@@ -53,155 +60,184 @@ export function MailPreview({
     }
   }, [isVisible, onAnnotationHover]);
 
+  useEffect(() => {
+    return () => {
+      if (thanksTimerRef.current) {
+        clearTimeout(thanksTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleSend = async () => {
-    if (!canSend || status === "sending") return;
+    if (!canSend || status === "sending" || status === "sent") return;
     setStatus("sending");
     const ok = await onSend(message.trim() || undefined);
-    setStatus(ok ? "sent" : "error");
-    if (ok) {
-      window.setTimeout(() => {
-        setStatus("idle");
-        setMessage("");
-        onClose();
-      }, 1200);
+    if (!ok) {
+      setStatus("error");
+      return;
     }
+    setStatus("sent");
+    if (thanksTimerRef.current) clearTimeout(thanksTimerRef.current);
+    thanksTimerRef.current = setTimeout(() => {
+      thanksTimerRef.current = null;
+      setStatus("idle");
+      setMessage("");
+      onSendSuccess();
+      onClose();
+    }, THANKS_MS);
   };
 
   const sendLabel =
     status === "sending"
       ? "Sending…"
-      : status === "sent"
-        ? "Sent"
-        : status === "error"
-          ? "Try again"
-          : "Send";
+      : status === "error"
+        ? "Try again"
+        : "Send";
 
   return (
     <div
-      className={`${styles.mailPreview} ${isVisible ? styles.enter : styles.exit}`}
+      className={styles.mailPreviewRoot}
       style={
         toolbarNearBottom
           ? { bottom: "auto", top: "calc(100% + 0.5rem)" }
           : undefined
       }
-      data-agentation-mail-preview
-      role="dialog"
-      aria-label="Send feedback"
     >
-      <div className={styles.header}>
-        <div className={styles.titleRow}>
-          <span className={styles.titleIcon} aria-hidden>
-            <IconSendArrow size={12} state="idle" />
-          </span>
-          <span className={styles.title}>Send feedback</span>
+      <div
+        className={`${styles.mailPreview} ${isVisible ? styles.enter : styles.exit} ${showingThanks ? styles.mailPreviewThanks : ""}`}
+        data-agentation-mail-preview
+        role="dialog"
+        aria-label="Send feedback"
+      >
+        <div className={styles.header}>
+          <div className={styles.titleRow}>
+            <span className={styles.titleIcon} aria-hidden>
+              <IconSendArrow size={12} state="idle" />
+            </span>
+            <span className={styles.title}>Send feedback</span>
+          </div>
+          <button
+            type="button"
+            className={styles.closeButton}
+            onClick={onClose}
+            aria-label="Close"
+            disabled={showingThanks}
+          >
+            <IconClose size={12} />
+          </button>
         </div>
-        <button
-          type="button"
-          className={styles.closeButton}
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <IconClose size={12} />
-        </button>
-      </div>
 
-      <div className={styles.body}>
-        {!hasDestination ? (
-          <p className={styles.empty}>
-            No feedback destination configured. Pass{" "}
-            <code>feedbackUrl</code>, <code>webhookUrl</code>, or{" "}
-            <code>mailto</code> to enable sending.
-          </p>
-        ) : (
-          <>
-            {hasAnnotations ? (
-              <ul className={styles.list}>
-                {annotations.map((annotation, index) => (
-                  <li
-                    key={annotation.id}
-                    className={styles.item}
-                    onMouseEnter={() => onAnnotationHover(annotation)}
-                    onMouseLeave={() => onAnnotationHover(null)}
-                  >
-                    <span className={styles.itemIndex}>{index + 1}</span>
-                    <div className={styles.itemBody}>
-                      <span className={styles.itemLabel}>
-                        {annotation.element}
-                      </span>
-                      <span className={styles.itemComment}>
-                        {annotation.comment}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className={styles.removeButton}
-                      onClick={() => onRemoveAnnotation(annotation.id)}
-                      aria-label={`Remove annotation ${index + 1}`}
+        <div className={styles.body}>
+          {!hasDestination ? (
+            <p className={styles.empty}>
+              No feedback destination configured. Pass{" "}
+              <code>feedbackUrl</code>, <code>webhookUrl</code>, or{" "}
+              <code>mailto</code> to enable sending.
+            </p>
+          ) : (
+            <>
+              {hasAnnotations ? (
+                <ul className={styles.list}>
+                  {annotations.map((annotation, index) => (
+                    <li
+                      key={annotation.id}
+                      className={styles.item}
+                      onMouseEnter={() => onAnnotationHover(annotation)}
+                      onMouseLeave={() => onAnnotationHover(null)}
                     >
-                      <IconXmark size={12} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : !hasMessage ? (
-              <p className={styles.empty}>
-                Click the page to add annotations.
-              </p>
-            ) : null}
+                      <span className={styles.itemIndex}>{index + 1}</span>
+                      <div className={styles.itemBody}>
+                        <span className={styles.itemLabel}>
+                          {annotation.element}
+                        </span>
+                        <span className={styles.itemComment}>
+                          {annotation.comment}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={styles.removeButton}
+                        onClick={() => onRemoveAnnotation(annotation.id)}
+                        aria-label={`Remove annotation ${index + 1}`}
+                        disabled={showingThanks}
+                      >
+                        <IconXmark size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : !hasMessage ? (
+                <p className={styles.empty}>
+                  Click the page to add annotations.
+                </p>
+              ) : null}
 
-            <div className={styles.messageField}>
-              <label className={styles.messageLabel} htmlFor="agentation-feedback-message">
-                Anything else?
-              </label>
-              <textarea
-                id="agentation-feedback-message"
-                className={styles.messageInput}
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="Optional overall notes…"
-                rows={2}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    (event.metaKey || event.ctrlKey)
-                  ) {
-                    event.preventDefault();
-                    void handleSend();
-                  }
-                }}
-              />
+              <div className={styles.messageField}>
+                <label
+                  className={styles.messageLabel}
+                  htmlFor="agentation-feedback-message"
+                >
+                  Anything else?
+                </label>
+                <textarea
+                  id="agentation-feedback-message"
+                  className={styles.messageInput}
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="Optional overall notes…"
+                  rows={2}
+                  disabled={showingThanks}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      (event.metaKey || event.ctrlKey)
+                    ) {
+                      event.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {hasDestination && (
+          <div className={styles.footer}>
+            {status === "error" && (
+              <p className={styles.errorText}>
+                Couldn&apos;t send. Check the endpoint and try again.
+              </p>
+            )}
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={onClose}
+                disabled={status === "sending" || showingThanks}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.primaryButton} ${status === "error" ? styles.primaryError : ""}`}
+                onClick={() => void handleSend()}
+                disabled={!canSend || status === "sending" || showingThanks}
+              >
+                {sendLabel}
+              </button>
             </div>
-          </>
+          </div>
         )}
       </div>
 
-      {hasDestination && (
-        <div className={styles.footer}>
-          {status === "error" && (
-            <p className={styles.errorText}>
-              Couldn&apos;t send. Check the endpoint and try again.
-            </p>
-          )}
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.secondaryButton}
-              onClick={onClose}
-              disabled={status === "sending"}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={`${styles.primaryButton} ${status === "sent" ? styles.primarySuccess : ""} ${status === "error" ? styles.primaryError : ""}`}
-              onClick={() => void handleSend()}
-              disabled={!canSend || status === "sending" || status === "sent"}
-            >
-              {sendLabel}
-            </button>
-          </div>
-        </div>
-      )}
+      <div
+        className={`${styles.thanksAside} ${showingThanks ? styles.thanksAsideVisible : ""}`}
+        aria-live="polite"
+        aria-hidden={!showingThanks}
+      >
+        <span className={styles.thanksText}>Thanks</span>
+      </div>
     </div>
   );
 }

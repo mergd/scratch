@@ -15,10 +15,55 @@ import { useCircleGesture } from './use-circle-gesture';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 
+/**
+ * Keyboard shortcut that unlocks AgentationFeedback in production.
+ * Defaults to Cmd/Ctrl+Shift+U (`code: "KeyU"` with metaOrCtrl + shift).
+ */
+export type ActivationKeybinding = {
+  /** `KeyboardEvent.code`, e.g. `"KeyU"`, `"KeyF"`, `"Slash"`. */
+  code: string;
+  /** Require Cmd (macOS) or Ctrl (Windows/Linux). Defaults to true. */
+  metaOrCtrl?: boolean;
+  /** Require Shift. Defaults to true. */
+  shift?: boolean;
+  /** Require Alt/Option. Defaults to false. */
+  alt?: boolean;
+};
+
+const DEFAULT_ACTIVATION_KEYBINDING: Required<ActivationKeybinding> = {
+  code: 'KeyU',
+  metaOrCtrl: true,
+  shift: true,
+  alt: false,
+};
+
+function matchesActivationKeybinding(
+  event: KeyboardEvent,
+  binding: ActivationKeybinding,
+): boolean {
+  const metaOrCtrl = binding.metaOrCtrl ?? true;
+  const shift = binding.shift ?? true;
+  const alt = binding.alt ?? false;
+
+  if (event.code !== binding.code) {
+    return false;
+  }
+  if (metaOrCtrl && !(event.metaKey || event.ctrlKey)) {
+    return false;
+  }
+  if (shift && !event.shiftKey) {
+    return false;
+  }
+  if (alt && !event.altKey) {
+    return false;
+  }
+  return true;
+}
+
 export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
   /**
    * When true, the toolbar starts visible (typical for local dev).
-   * Defaults to false — unlock via three circles or Cmd/Ctrl+Shift+U.
+   * Defaults to false — unlock via three circles or the activation keybinding.
    */
   isDevelopment?: boolean;
   /**
@@ -26,6 +71,12 @@ export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
    * Defaults to 30_000 ms. Pass `false` or `0` to disable idle dismiss.
    */
   idleTimeoutMs?: number | false;
+  /**
+   * Shortcut to unlock feedback when not in development mode.
+   * Defaults to Cmd/Ctrl+Shift+U. Pass `false` to disable keyboard unlock
+   * (circle gesture still works).
+   */
+  activationKeybinding?: ActivationKeybinding | false;
   /** Customize unlock-guide copy (title, body, steps, button labels). */
   guide?: FeedbackGuideCopy;
   /**
@@ -43,13 +94,14 @@ export type AgentationFeedbackProps = ComponentProps<typeof Agentation> & {
 /**
  * Feedback toolbar. Always-on when `isDevelopment` is true;
  * otherwise hidden until the user draws three circles with their cursor
- * or presses Cmd/Ctrl+Shift+U.
+ * or presses the activation keybinding (default Cmd/Ctrl+Shift+U).
  *
  * On unlock, shows a short guide once (persisted in a cookie after any dismiss).
  */
 export function AgentationFeedback({
   isDevelopment = false,
   idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
+  activationKeybinding = DEFAULT_ACTIVATION_KEYBINDING,
   guide,
   primaryColor,
   ...agentationProps
@@ -115,12 +167,17 @@ export function AgentationFeedback({
   useCircleGesture(toggle, !isDevelopment);
 
   useEffect(() => {
-    if (isDevelopment) {
+    if (isDevelopment || activationKeybinding === false) {
       return;
     }
 
+    const binding = {
+      ...DEFAULT_ACTIVATION_KEYBINDING,
+      ...activationKeybinding,
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyU') {
+      if (matchesActivationKeybinding(event, binding)) {
         event.preventDefault();
         toggle();
       }
@@ -128,7 +185,7 @@ export function AgentationFeedback({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDevelopment, toggle]);
+  }, [isDevelopment, activationKeybinding, toggle]);
 
   useEffect(() => {
     if (!active || isDevelopment) {

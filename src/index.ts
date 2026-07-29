@@ -23,7 +23,11 @@ export {
   getStorageKey,
 } from './toolbar';
 export * from './toolbar/components/icons';
-export { AgentationFeedback, type AgentationFeedbackProps } from './AgentationFeedback';
+export {
+  AgentationFeedback,
+  type ActivationKeybinding,
+  type AgentationFeedbackProps,
+} from './AgentationFeedback';
 export {
   FeedbackGuide,
   shouldShowFeedbackGuide,

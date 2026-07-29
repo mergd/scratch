@@ -1,0 +1,45 @@
+.dragHandle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 30px;
+  margin: 0 2px 0 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: rgba(130, 158, 190, 0.72);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    color: rgba(155, 182, 212, 0.92);
+    background: rgba(130, 158, 190, 0.1);
+  }
+
+  &.grabbing,
+  &:active {
+    cursor: grabbing;
+    color: rgba(175, 200, 228, 0.98);
+    background: rgba(130, 158, 190, 0.14);
+  }
+}
+
+.knurl {
+  display: grid;
+  grid-template-columns: repeat(2, 2px);
+  grid-template-rows: repeat(4, 2px);
+  gap: 1.5px 1.5px;
+  pointer-events: none;
+}
+
+.dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 0;
+  background: currentColor;
+}

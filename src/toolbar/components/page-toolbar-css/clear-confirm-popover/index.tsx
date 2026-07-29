@@ -7,6 +7,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { originalRequestAnimationFrame } from "../../../utils/freeze-animations";
 import { useShadowRoot } from "../../../utils/use-shadow-root";
 import styles from "../styles.module.scss";
 
@@ -23,11 +24,6 @@ export type ClearConfirmPopoverProps = {
   onCancel: () => void;
 };
 
-function isNodeInComposedPath(event: Event, node: Node | null | undefined) {
-  if (!node) return false;
-  return event.composedPath().includes(node);
-}
-
 export function ClearConfirmPopover({
   anchorRef,
   onConfirm,
@@ -35,8 +31,8 @@ export function ClearConfirmPopover({
 }: ClearConfirmPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const shadowRoot = useShadowRoot(anchorRef);
-  const portalTarget =
-    shadowRoot instanceof ShadowRoot ? shadowRoot : document.body;
+  // Never portal to document.body — shadow CSS would not apply.
+  const portalTarget = shadowRoot instanceof ShadowRoot ? shadowRoot : null;
   const [placement, setPlacement] = useState<ClearConfirmPlacement | null>(
     null,
   );
@@ -51,6 +47,8 @@ export function ClearConfirmPopover({
     const anchorRect = anchor.getBoundingClientRect();
     const popoverWidth = popover.offsetWidth;
     const popoverHeight = popover.offsetHeight;
+    if (popoverWidth === 0 || popoverHeight === 0) return;
+
     const spaceAbove = anchorRect.top - margin;
     const spaceBelow = window.innerHeight - anchorRect.bottom - margin;
     const placementSide =
@@ -78,31 +76,31 @@ export function ClearConfirmPopover({
   }, [anchorRef]);
 
   useLayoutEffect(() => {
+    if (!portalTarget) return;
+
     updatePlacement();
+    const frameId = originalRequestAnimationFrame(updatePlacement);
+
+    const popover = popoverRef.current;
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" && popover
+        ? new ResizeObserver(updatePlacement)
+        : null;
+    resizeObserver?.observe(popover);
+
     window.addEventListener("resize", updatePlacement);
     window.addEventListener("scroll", updatePlacement, true);
     return () => {
+      cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", updatePlacement);
       window.removeEventListener("scroll", updatePlacement, true);
     };
-  }, [updatePlacement]);
+  }, [portalTarget, updatePlacement]);
 
   useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        isNodeInComposedPath(event, anchorRef.current) ||
-        isNodeInComposedPath(event, popoverRef.current)
-      ) {
-        return;
-      }
-      onCancel();
-    };
+    if (!portalTarget) return;
 
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [anchorRef, onCancel]);
-
-  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -112,51 +110,68 @@ export function ClearConfirmPopover({
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [onCancel]);
+  }, [portalTarget, onCancel]);
+
+  if (!portalTarget) return null;
 
   return createPortal(
-    <div
-      ref={popoverRef}
-      className={`${styles.clearConfirm} ${styles.clearConfirmFixed} ${
-        placement?.placement === "below" ? styles.clearConfirmBelow : ""
-      }`}
-      style={
-        placement
-          ? ({
-              top: placement.top,
-              left: placement.left,
-              ["--clear-confirm-arrow-left" as string]: `${placement.arrowLeft}px`,
-            } as React.CSSProperties)
-          : { visibility: "hidden" }
-      }
-      data-feedback-toolbar
-      role="dialog"
-      aria-label="Confirm clear all annotations"
-    >
-      <p className={styles.clearConfirmText}>Clear all annotations?</p>
-      <div className={styles.clearConfirmActions}>
-        <button
-          type="button"
-          className={styles.clearConfirmCancel}
-          onClick={(event) => {
-            event.stopPropagation();
-            onCancel();
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={styles.clearConfirmConfirm}
-          onClick={(event) => {
-            event.stopPropagation();
-            onConfirm();
-          }}
-        >
-          Clear
-        </button>
+    <>
+      <div
+        className={styles.clearConfirmBackdrop}
+        aria-hidden="true"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onCancel();
+        }}
+      />
+      <div
+        ref={popoverRef}
+        className={`${styles.clearConfirm} ${styles.clearConfirmFixed} ${
+          placement?.placement === "below" ? styles.clearConfirmBelow : ""
+        }`}
+        style={
+          placement
+            ? ({
+                top: placement.top,
+                left: placement.left,
+                ["--clear-confirm-arrow-left" as string]: `${placement.arrowLeft}px`,
+              } as React.CSSProperties)
+            : { opacity: 0, pointerEvents: "none" }
+        }
+        onPointerDown={(event) => event.stopPropagation()}
+        data-feedback-toolbar
+        role="dialog"
+        aria-modal="true"
+        aria-label="Confirm clear all annotations"
+      >
+        <p className={styles.clearConfirmText}>Clear all annotations?</p>
+        <div className={styles.clearConfirmActions}>
+          <button
+            type="button"
+            className={styles.clearConfirmCancel}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onCancel();
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={styles.clearConfirmConfirm}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onConfirm();
+            }}
+          >
+            Clear
+          </button>
+        </div>
       </div>
-    </div>,
+    </>,
     portalTarget,
   );
 }

@@ -22,6 +22,7 @@ import {
   IconXmarkLarge,
   IconEdit,
 } from "../icons";
+import { DragHandle } from "./drag-handle";
 import {
   identifyElement,
   getNearbyText,
@@ -90,6 +91,7 @@ import { css as helpTooltipCss } from "../help-tooltip/styles.module.scss";
 import { css as iconTransitionsCss } from "../icon-transitions.module.scss";
 import { css as annotationMarkerCss } from "./annotation-marker/styles.module.scss";
 import { css as mailPreviewCss } from "./mail-preview/styles.module.scss";
+import { css as dragHandleCss } from "./drag-handle/styles.module.scss";
 
 const shadowCss = [
   resetCss,
@@ -99,6 +101,7 @@ const shadowCss = [
   iconTransitionsCss,
   annotationMarkerCss,
   mailPreviewCss,
+  dragHandleCss,
 ].join("\n");
 
 /**
@@ -566,6 +569,7 @@ export function PageFeedbackToolbarCSS({
   const [showMailPreviewVisible, setShowMailPreviewVisible] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const clearConfirmRef = useRef<HTMLDivElement>(null);
+  const clearConfirmOpeningRef = useRef(false);
   const [tooltipsHidden, setTooltipsHidden] = useState(false);
   const [tooltipSessionActive, setTooltipSessionActive] = useState(false);
   const tooltipSessionTimerRef = useRef<ReturnType<
@@ -2630,7 +2634,11 @@ export function PageFeedbackToolbarCSS({
 
   const requestClearAll = useCallback(() => {
     if (annotations.length === 0) return;
+    clearConfirmOpeningRef.current = true;
     setShowClearConfirm(true);
+    originalSetTimeout(() => {
+      clearConfirmOpeningRef.current = false;
+    }, 0);
   }, [annotations.length]);
 
   const confirmClearAll = useCallback(() => {
@@ -2640,6 +2648,7 @@ export function PageFeedbackToolbarCSS({
   }, [annotations.length, clearAll]);
 
   const cancelClearAll = useCallback(() => {
+    if (clearConfirmOpeningRef.current) return;
     setShowClearConfirm(false);
   }, []);
 
@@ -2794,15 +2803,14 @@ export function PageFeedbackToolbarCSS({
   ]);
 
   const handleSendFeedbackMail = useCallback(
-    async (message?: string): Promise<boolean> => {
-      const ok = await sendFeedbackMail(message);
-      if (ok) {
-        clearAll();
-      }
-      return ok;
-    },
-    [sendFeedbackMail, clearAll],
+    async (message?: string): Promise<boolean> => sendFeedbackMail(message),
+    [sendFeedbackMail],
   );
+
+  const handleFeedbackMailSent = useCallback(() => {
+    clearAll();
+    setShowMailPreview(false);
+  }, [clearAll]);
 
   // Toolbar dragging - mousemove and mouseup
   useEffect(() => {
@@ -2874,10 +2882,14 @@ export function PageFeedbackToolbarCSS({
   // Handle toolbar drag start
   const handleToolbarMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Only drag when clicking the toolbar background (not buttons or panels)
+      const target = e.target as HTMLElement;
+      const isDragHandle = !!target.closest("[data-toolbar-drag-handle]");
+
+      // Only drag when clicking the toolbar background, drag handle, or non-interactive chrome
       if (
-        (e.target as HTMLElement).closest("button") ||
-        (e.target as HTMLElement).closest("[data-agentation-mail-preview]")
+        !isDragHandle &&
+        (target.closest("button") ||
+          target.closest("[data-agentation-mail-preview]"))
       ) {
         return;
       }
@@ -3172,7 +3184,7 @@ export function PageFeedbackToolbarCSS({
           {/* Morphing container */}
           <div
             data-toolbar-container
-            className={`${styles.toolbarContainer} ${isActive ? styles.expanded : styles.collapsed} ${showEntranceAnimation ? styles.entrance : ""} ${isToolbarHiding ? styles.hiding : ""} ${showMailFeedback ? styles.mailEnabled : ""} ${sendButtonVisible ? styles.serverConnected : ""}`}
+            className={`${styles.toolbarContainer} ${isActive ? styles.expanded : styles.collapsed} ${isDraggingToolbar ? styles.dragging : ""} ${showEntranceAnimation ? styles.entrance : ""} ${isToolbarHiding ? styles.hiding : ""}`}
             onClick={
               !isActive
                 ? (e) => {
@@ -3215,51 +3227,56 @@ export function PageFeedbackToolbarCSS({
               onMouseEnter={handleControlsMouseEnter}
               onMouseLeave={handleControlsMouseLeave}
             >
-              <div
-                className={`${styles.buttonWrapper} ${styles.mailButtonWrapper} ${showMailFeedback && isActive ? styles.mailButtonVisible : ""}`}
-              >
-                <button
-                  className={`${styles.controlButton} ${styles.sendPrimaryButton}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    hideTooltipsUntilMouseLeave();
-                    setShowClearConfirm(false);
-                    setShowMailPreview((open) => !open);
-                  }}
-                  data-active={showMailPreview}
-                  tabIndex={showMailFeedback ? 0 : -1}
-                >
-                  <IconSendArrow size={24} state="idle" />
-                </button>
-                <span className={styles.buttonTooltip}>Send feedback</span>
-              </div>
+              <DragHandle grabbing={isDraggingToolbar} />
 
-              {/* Send button - only visible when webhook URL is available AND auto-send is off */}
-              <div
-                className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${sendButtonVisible ? styles.sendButtonVisible : ""}`}
-              >
-                <button
-                  className={`${styles.controlButton} ${styles.sendPrimaryButton} ${sendState === "sent" || sendState === "failed" ? styles.statusShowing : ""}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    hideTooltipsUntilMouseLeave();
-                    sendToWebhook();
-                  }}
-                  disabled={
-                    !hasAnnotations ||
-                    !isValidUrl(configuredWebhookUrl) ||
-                    sendState === "sending"
-                  }
-                  data-no-hover={sendState === "sent" || sendState === "failed"}
-                  tabIndex={isValidUrl(configuredWebhookUrl) ? 0 : -1}
+              {showMailFeedback && isActive && (
+                <div
+                  className={`${styles.buttonWrapper} ${styles.mailButtonWrapper} ${styles.mailButtonVisible}`}
                 >
-                  <IconSendArrow size={24} state={sendState} />
-                </button>
-                <span className={styles.buttonTooltip}>
-                  Send feedback
-                  <span className={styles.shortcut}>S</span>
-                </span>
-              </div>
+                  <button
+                    className={`${styles.controlButton} ${styles.sendPrimaryButton}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      setShowClearConfirm(false);
+                      setShowMailPreview((open) => !open);
+                    }}
+                    data-active={showMailPreview}
+                    tabIndex={0}
+                  >
+                    <IconSendArrow size={24} state="idle" />
+                  </button>
+                  <span className={styles.buttonTooltip}>Send feedback</span>
+                </div>
+              )}
+
+              {sendButtonVisible && (
+                <div
+                  className={`${styles.buttonWrapper} ${styles.sendButtonWrapper} ${styles.sendButtonVisible}`}
+                >
+                  <button
+                    className={`${styles.controlButton} ${styles.sendPrimaryButton} ${sendState === "sent" || sendState === "failed" ? styles.statusShowing : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      hideTooltipsUntilMouseLeave();
+                      sendToWebhook();
+                    }}
+                    disabled={
+                      !hasAnnotations ||
+                      !isValidUrl(configuredWebhookUrl) ||
+                      sendState === "sending"
+                    }
+                    data-no-hover={sendState === "sent" || sendState === "failed"}
+                    tabIndex={isValidUrl(configuredWebhookUrl) ? 0 : -1}
+                  >
+                    <IconSendArrow size={24} state={sendState} />
+                  </button>
+                  <span className={styles.buttonTooltip}>
+                    Send feedback
+                    <span className={styles.shortcut}>S</span>
+                  </span>
+                </div>
+              )}
 
               <div
                 className={`${styles.buttonWrapper} ${
@@ -3319,16 +3336,19 @@ export function PageFeedbackToolbarCSS({
                 )}
                 <button
                   className={styles.controlButton}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
                     hideTooltipsUntilMouseLeave();
                     bumpActivity();
                     if (showClearConfirm) {
-                      cancelClearAll();
                       return;
                     }
                     requestClearAll();
                   }}
+                  disabled={!hasAnnotations}
                   data-danger
                   data-active={showClearConfirm}
                 >
@@ -3379,6 +3399,7 @@ export function PageFeedbackToolbarCSS({
               }
               onClose={() => setShowMailPreview(false)}
               onSend={handleSendFeedbackMail}
+              onSendSuccess={handleFeedbackMailSent}
               onRemoveAnnotation={deleteAnnotation}
               onAnnotationHover={handleMarkerHover}
             />
