@@ -1,4 +1,7 @@
 dist
+demo/dist
 node_modules
 *.tgz
 .DS_Store
+.wrangler
+.dev.vars

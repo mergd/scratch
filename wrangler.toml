@@ -1,0 +1,20 @@
+name = "scratch-demo"
+main = "worker/index.ts"
+compatibility_date = "2025-07-12"
+workers_dev = true
+account_id = "24d3bab86b3b44170195747d8f330d4e"
+
+[assets]
+directory = "./demo/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[[routes]]
+pattern = "scratch.fldr.zip"
+custom_domain = true
+
+[[kv_namespaces]]
+binding = "FEEDBACK"
+id = "8b40013015354e8b89830f4efa23a9dc"
+preview_id = "f66a20d9daa444abbe8fa7b48f19aea0"

@@ -4,6 +4,8 @@ User feedback toolbar for apps — mark what's confusing. Always on in developme
 
 Heavily inspired by / derived from [Agentation](https://github.com/benjitaylor/agentation) by Benji Taylor (see `NOTICE` / `UPSTREAM_LICENSE`). Dom context is still captured for developers and coding agents.
 
+**Live playground:** [scratch.fldr.zip](https://scratch.fldr.zip)
+
 ## Install
 
 ```bash
@@ -46,3 +48,5 @@ bun run demo
 ```
 
 Opens a local page with `feedbackUrl="/api/feedback"`. Annotate → mail icon → Send; the last JSON payload appears on the page.
+
+Deployed demo: [scratch.fldr.zip](https://scratch.fldr.zip) (`bun run deploy`).

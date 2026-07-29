@@ -31,6 +31,8 @@
     "build": "tsup",
     "check": "tsc -p tsconfig.build.json --noEmit",
     "demo": "vite --config demo/vite.config.ts",
+    "demo:build": "vite build --config demo/vite.config.ts",
+    "deploy": "bun run demo:build && wrangler deploy",
     "prepack": "bun run build",
     "test": "vitest run --passWithNoTests"
   },
@@ -44,6 +46,7 @@
   },
   "devDependencies": {
     "@base-ui/react": "^1.6.0",
+    "@cloudflare/workers-types": "^5.20260729.1",
     "@types/node": "^22.15.30",
     "@types/prismjs": "^1.26.6",
     "@types/react": "^19.1.8",
@@ -59,7 +62,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vite": "^7.0.6",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.115.0"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10"
