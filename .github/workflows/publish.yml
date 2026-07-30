@@ -19,6 +19,9 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +32,10 @@ jobs:
           package-manager-cache: false
 
       - name: Ensure npm supports OIDC trusted publishing
-        run: npm install -g npm@latest
+        run: |
+          npm install -g npm@latest
+          npm --version
+          node --version
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -43,6 +49,10 @@ jobs:
 
       - name: Publish
         # Auth via GitHub OIDC trusted publishing — no NPM_TOKEN secret.
-        # Configure on https://www.npmjs.com/package/@fldr/scratch → Settings
-        # → Trusted Publisher: mergd / scratch / publish.yml
-        run: npm publish --access public
+        # npmjs Trusted Publisher must be exactly:
+        #   Organization or user: mergd
+        #   Repository: scratch
+        #   Workflow filename: publish.yml
+        #   Allowed actions: npm publish
+        #   Environment: (leave blank)
+        run: npm publish --access public --loglevel verbose
