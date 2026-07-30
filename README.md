@@ -26,6 +26,52 @@ import { ScratchFeedback } from '@fldr/scratch';
 
 Props like `onSubmit`, `copyToClipboard`, `webhookUrl`, etc. are forwarded to the toolbar.
 
+### Host-managed keyboard shortcuts
+
+Scratch uses browser `keydown` listeners by default. A host application can
+instead register every Scratch command with its own shortcut system:
+
+```tsx
+import type {
+  ScratchHotkeyAdapter,
+  ScratchMode,
+} from "@fldr/scratch";
+
+const hotkeys: ScratchHotkeyAdapter = {
+  register(command) {
+    return appShortcuts.register({
+      id: `scratch.${command.id}`,
+      binding: command.binding,
+      title: command.title,
+      description: command.description,
+      group: command.group,
+      enabled: command.enabled,
+      ignoreInputs: command.ignoreInputs,
+      preventDefault: command.preventDefault,
+      run: command.run,
+    });
+  },
+};
+
+function Feedback() {
+  const handleModeChange = (mode: ScratchMode) => {
+    // Suspend conflicting app shortcuts while mode === "annotating".
+  };
+
+  return (
+    <ScratchFeedback
+      hotkeys={hotkeys}
+      onModeChange={handleModeChange}
+    />
+  );
+}
+```
+
+Omit `hotkeys` to keep the built-in listeners, or pass `false` to disable all
+keyboard shortcuts. Use `hotkeyBindings` to replace or disable individual
+bindings. Scratch never installs native keyboard listeners when a host adapter
+is supplied.
+
 ### Mail-back feedback
 
 When the user opens the mail icon and confirms send, Scratch delivers to every configured destination:

@@ -80,6 +80,13 @@ import {
   type FeedbackMailPayload,
 } from "./mail-preview";
 import { ClearConfirmPopover } from "./clear-confirm-popover";
+import {
+  DEFAULT_SCRATCH_HOTKEY_BINDINGS,
+  type ScratchHotkeyBindings,
+  type ScratchHotkeyId,
+  type ScratchHotkeys,
+  useScratchHotkey,
+} from "../../../hotkeys";
 
 export type { FeedbackMailPayload };
 import { ShadowRoot } from "../shadow-root";
@@ -92,6 +99,15 @@ import { css as iconTransitionsCss } from "../icon-transitions.module.scss";
 import { css as annotationMarkerCss } from "./annotation-marker/styles.module.scss";
 import { css as mailPreviewCss } from "./mail-preview/styles.module.scss";
 import { css as dragHandleCss } from "./drag-handle/styles.module.scss";
+
+function resolveHotkeyBinding(
+  bindings: ScratchHotkeyBindings | undefined,
+  id: ScratchHotkeyId,
+) {
+  const override = bindings?.[id];
+  if (override === false) return null;
+  return override ?? DEFAULT_SCRATCH_HOTKEY_BINDINGS[id];
+}
 
 const shadowCss = [
   resetCss,
@@ -417,6 +433,15 @@ export type PageFeedbackToolbarCSSProps = {
    * Defaults to false — user clicks the toolbar badge first.
    */
   startActive?: boolean;
+  /**
+   * Host keyboard integration. Omit for Scratch's built-in window listeners,
+   * pass false to disable shortcuts, or provide an adapter to register them.
+   */
+  hotkeys?: ScratchHotkeys;
+  /** Override or disable individual default shortcut bindings. */
+  hotkeyBindings?: ScratchHotkeyBindings;
+  /** Called when annotation mode is entered or exited. */
+  onAnnotationModeChange?: (annotating: boolean) => void;
   /** Called when the user exits feedback mode (close button, Esc, idle dismiss, clear-all). */
   onRequestClose?: () => void;
   /** Fired on toolbar/marker interaction to reset parent idle timers. */
@@ -455,6 +480,9 @@ export function PageFeedbackToolbarCSS({
   className: userClassName,
   primaryColor,
   startActive = false,
+  hotkeys,
+  hotkeyBindings,
+  onAnnotationModeChange,
   onRequestClose,
   onActivity,
   onIdleBlockedChange,
@@ -466,6 +494,10 @@ export function PageFeedbackToolbarCSS({
     loadToolbarHidden(),
   );
   const [isToolbarHiding, setIsToolbarHiding] = useState(false);
+
+  useEffect(() => {
+    onAnnotationModeChange?.(isActive);
+  }, [isActive, onAnnotationModeChange]);
 
   // Stop native events from bubbling past document.body when they originate
   // inside the toolbar portal. Without this, clicks on the toolbar propagate to
@@ -2957,131 +2989,178 @@ export function PageFeedbackToolbarCSS({
     getToolbarLayoutWidths,
   ]);
 
-  // Keyboard shortcuts (capture on window so they fire inside shadow DOM)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isTyping =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
+  useScratchHotkey(hotkeys, {
+    id: "toggleAnnotation",
+    binding: resolveHotkeyBinding(hotkeyBindings, "toggleAnnotation") ??
+      DEFAULT_SCRATCH_HOTKEY_BINDINGS.toggleAnnotation,
+    title: "Toggle annotation mode",
+    description: "Start or stop selecting elements for feedback",
+    group: "Feedback",
+    enabled: resolveHotkeyBinding(hotkeyBindings, "toggleAnnotation") !== null,
+    ignoreInputs: false,
+    preventDefault: true,
+    run: () => {
+      hideTooltipsUntilMouseLeave();
+      if (isActive) {
+        deactivate();
+      } else {
+        setIsActive(true);
+      }
+    },
+  });
 
-      if (e.key === "Escape") {
-        if (showClearConfirm) {
-          e.preventDefault();
-          setShowClearConfirm(false);
-          return;
-        }
-        if (showMailPreview) {
-          e.preventDefault();
-          setShowMailPreview(false);
-          return;
-        }
-        if (pendingMultiSelectElements.length > 0) {
-          e.preventDefault();
-          setPendingMultiSelectElements([]);
-          return;
-        }
-        if (pendingAnnotation) {
-          return;
-        }
-        if (isActive) {
-          e.preventDefault();
+  const escapeEnabled = showClearConfirm ||
+    showMailPreview ||
+    pendingMultiSelectElements.length > 0 ||
+    (!pendingAnnotation && isActive);
+  const escapeBinding = resolveHotkeyBinding(hotkeyBindings, "escape");
+  useScratchHotkey(
+    hotkeys,
+    escapeBinding
+      ? {
+        id: "escape",
+        binding: escapeBinding,
+        title: "Close feedback",
+        description: "Close the active feedback surface or selection",
+        group: "Feedback",
+        enabled: escapeEnabled,
+        ignoreInputs: false,
+        preventDefault: true,
+        run: () => {
+          if (showClearConfirm) {
+            setShowClearConfirm(false);
+            return;
+          }
+          if (showMailPreview) {
+            setShowMailPreview(false);
+            return;
+          }
+          if (pendingMultiSelectElements.length > 0) {
+            setPendingMultiSelectElements([]);
+            return;
+          }
           hideTooltipsUntilMouseLeave();
           deactivate();
-        }
-        return;
+        },
       }
+      : null,
+  );
 
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        (e.key === "f" || e.key === "F")
-      ) {
-        e.preventDefault();
-        hideTooltipsUntilMouseLeave();
-        if (isActive) {
-          deactivate();
-        } else {
-          setIsActive(true);
-        }
-        return;
-      }
-
-      if (!isActive || isTyping || e.metaKey || e.ctrlKey || e.altKey) return;
-
-      if (e.key === "p" || e.key === "P") {
-        e.preventDefault();
-        hideTooltipsUntilMouseLeave();
-        toggleFreeze();
-        return;
-      }
-
-      if (e.key === "h" || e.key === "H") {
-        if (annotations.length > 0) {
-          e.preventDefault();
+  const freezeBinding = resolveHotkeyBinding(hotkeyBindings, "freeze");
+  useScratchHotkey(
+    hotkeys,
+    freezeBinding
+      ? {
+        id: "freeze",
+        binding: freezeBinding,
+        title: "Freeze animations",
+        description: "Pause or resume page animations while annotating",
+        group: "Feedback",
+        enabled: isActive,
+        ignoreInputs: true,
+        preventDefault: true,
+        run: () => {
           hideTooltipsUntilMouseLeave();
-          setShowMarkers((prev) => !prev);
-        }
-        return;
+          toggleFreeze();
+        },
       }
+      : null,
+  );
 
-      if (enableCopy && (e.key === "c" || e.key === "C")) {
-        if (annotations.length > 0) {
-          e.preventDefault();
+  const hasAnnotations = annotations.length > 0;
+  const markerBinding = resolveHotkeyBinding(hotkeyBindings, "toggleMarkers");
+  useScratchHotkey(
+    hotkeys,
+    markerBinding
+      ? {
+        id: "toggleMarkers",
+        binding: markerBinding,
+        title: "Toggle feedback markers",
+        description: "Show or hide existing annotation markers",
+        group: "Feedback",
+        enabled: isActive && hasAnnotations,
+        ignoreInputs: true,
+        preventDefault: true,
+        run: () => {
           hideTooltipsUntilMouseLeave();
-          copyOutput();
-        }
-        return;
+          setShowMarkers((previous) => !previous);
+        },
       }
+      : null,
+  );
 
-      if (e.key === "x" || e.key === "X") {
-        if (annotations.length > 0) {
-          e.preventDefault();
+  const copyBinding = resolveHotkeyBinding(hotkeyBindings, "copy");
+  useScratchHotkey(
+    hotkeys,
+    copyBinding
+      ? {
+        id: "copy",
+        binding: copyBinding,
+        title: "Copy feedback",
+        description: "Copy annotations as markdown",
+        group: "Feedback",
+        enabled: isActive && enableCopy && hasAnnotations,
+        ignoreInputs: true,
+        preventDefault: true,
+        run: () => {
+          hideTooltipsUntilMouseLeave();
+          void copyOutput();
+        },
+      }
+      : null,
+  );
+
+  const clearBinding = resolveHotkeyBinding(hotkeyBindings, "clear");
+  useScratchHotkey(
+    hotkeys,
+    clearBinding
+      ? {
+        id: "clear",
+        binding: clearBinding,
+        title: "Clear feedback",
+        description: "Review or confirm clearing all annotations",
+        group: "Feedback",
+        enabled: isActive && hasAnnotations,
+        ignoreInputs: true,
+        preventDefault: true,
+        run: () => {
           hideTooltipsUntilMouseLeave();
           if (showClearConfirm) {
             confirmClearAll();
           } else {
             requestClearAll();
           }
-        }
-        return;
+        },
       }
+      : null,
+  );
 
-      if (e.key === "s" || e.key === "S") {
-        const hasValidWebhook = isValidUrl(configuredWebhookUrl);
-        if (annotations.length > 0 && hasValidWebhook && sendState === "idle") {
-          e.preventDefault();
+  const sendBinding = resolveHotkeyBinding(hotkeyBindings, "send");
+  useScratchHotkey(
+    hotkeys,
+    sendBinding
+      ? {
+        id: "send",
+        binding: sendBinding,
+        title: "Send feedback",
+        description: "Send the current annotations",
+        group: "Feedback",
+        enabled: isActive &&
+          hasAnnotations &&
+          isValidUrl(configuredWebhookUrl) &&
+          sendState === "idle",
+        ignoreInputs: true,
+        preventDefault: true,
+        run: () => {
           hideTooltipsUntilMouseLeave();
-          sendToWebhook();
-        }
+          void sendToWebhook();
+        },
       }
-    };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [
-    isActive,
-    pendingAnnotation,
-    annotations.length,
-    configuredWebhookUrl,
-    sendState,
-    sendToWebhook,
-    toggleFreeze,
-    copyOutput,
-    requestClearAll,
-    confirmClearAll,
-    showClearConfirm,
-    showMailPreview,
-    enableCopy,
-    pendingMultiSelectElements,
-    deactivate,
-  ]);
+      : null,
+  );
 
   if (!mounted) return null;
   if (isToolbarHidden) return null;
-
-  const hasAnnotations = annotations.length > 0;
 
   // Filter annotations for rendering (exclude exiting ones from normal flow)
   const visibleAnnotations = annotations.filter(

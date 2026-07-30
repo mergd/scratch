@@ -25,9 +25,18 @@ export {
 export * from './toolbar/components/icons';
 export {
   ScratchFeedback,
-  type ActivationKeybinding,
   type ScratchFeedbackProps,
+  type ScratchMode,
 } from './ScratchFeedback';
+export {
+  DEFAULT_SCRATCH_HOTKEY_BINDINGS,
+  type ActivationKeybinding,
+  type ScratchHotkeyAdapter,
+  type ScratchHotkeyBindings,
+  type ScratchHotkeyCommand,
+  type ScratchHotkeyId,
+  type ScratchHotkeys,
+} from './hotkeys';
 export {
   FeedbackGuide,
   shouldShowFeedbackGuide,

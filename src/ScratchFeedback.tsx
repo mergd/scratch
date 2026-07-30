@@ -7,6 +7,12 @@ import {
 } from 'react';
 import { Scratch, COLOR_OPTIONS, type AnnotationColorId } from './toolbar';
 import {
+  DEFAULT_SCRATCH_HOTKEY_BINDINGS,
+  type ActivationKeybinding,
+  type ScratchHotkeys,
+  useScratchHotkey,
+} from './hotkeys';
+import {
   FeedbackGuide,
   shouldShowFeedbackGuide,
   type FeedbackGuideCopy,
@@ -15,50 +21,10 @@ import { useCircleGesture } from './use-circle-gesture';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 
-/**
- * Keyboard shortcut that unlocks ScratchFeedback in production.
- * Defaults to Cmd/Ctrl+Shift+U (`code: "KeyU"` with metaOrCtrl + shift).
- */
-export type ActivationKeybinding = {
-  /** `KeyboardEvent.code`, e.g. `"KeyU"`, `"KeyF"`, `"Slash"`. */
-  code: string;
-  /** Require Cmd (macOS) or Ctrl (Windows/Linux). Defaults to true. */
-  metaOrCtrl?: boolean;
-  /** Require Shift. Defaults to true. */
-  shift?: boolean;
-  /** Require Alt/Option. Defaults to false. */
-  alt?: boolean;
-};
+const DEFAULT_ACTIVATION_KEYBINDING =
+  DEFAULT_SCRATCH_HOTKEY_BINDINGS.toggleFeedback;
 
-const DEFAULT_ACTIVATION_KEYBINDING: Required<ActivationKeybinding> = {
-  code: 'KeyU',
-  metaOrCtrl: true,
-  shift: true,
-  alt: false,
-};
-
-function matchesActivationKeybinding(
-  event: KeyboardEvent,
-  binding: ActivationKeybinding,
-): boolean {
-  const metaOrCtrl = binding.metaOrCtrl ?? true;
-  const shift = binding.shift ?? true;
-  const alt = binding.alt ?? false;
-
-  if (event.code !== binding.code) {
-    return false;
-  }
-  if (metaOrCtrl && !(event.metaKey || event.ctrlKey)) {
-    return false;
-  }
-  if (shift && !event.shiftKey) {
-    return false;
-  }
-  if (alt && !event.altKey) {
-    return false;
-  }
-  return true;
-}
+export type ScratchMode = 'hidden' | 'ready' | 'annotating';
 
 export type ScratchFeedbackProps = ComponentProps<typeof Scratch> & {
   /**
@@ -77,6 +43,11 @@ export type ScratchFeedbackProps = ComponentProps<typeof Scratch> & {
    * (circle gesture still works).
    */
   activationKeybinding?: ActivationKeybinding | false;
+  /**
+   * Observe whether feedback is hidden, visible, or actively annotating.
+   * Hosts can use this to suspend conflicting application shortcuts.
+   */
+  onModeChange?: (mode: ScratchMode) => void;
   /** Customize unlock-guide copy (title, body, steps, button labels). */
   guide?: FeedbackGuideCopy;
   /**
@@ -102,7 +73,10 @@ export type ScratchFeedbackProps = ComponentProps<typeof Scratch> & {
 export function ScratchFeedback({
   isDevelopment = false,
   idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
-  activationKeybinding = DEFAULT_ACTIVATION_KEYBINDING,
+  activationKeybinding,
+  hotkeys,
+  hotkeyBindings,
+  onModeChange,
   guide,
   primaryColor,
   ...scratchProps
@@ -114,10 +88,12 @@ export function ScratchFeedback({
   );
   const [guideOpen, setGuideOpen] = useState(() => shouldShowFeedbackGuide());
   const [idleBlocked, setIdleBlocked] = useState(false);
+  const [annotating, setAnnotating] = useState(active);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismiss = useCallback(() => {
     setActive(false);
+    setAnnotating(false);
     setGuideOpen(false);
   }, []);
 
@@ -169,26 +145,37 @@ export function ScratchFeedback({
 
   useCircleGesture(toggle, !isDevelopment);
 
-  useEffect(() => {
-    if (isDevelopment || activationKeybinding === false) {
-      return;
-    }
-
-    const binding = {
+  const activationOverride = activationKeybinding ??
+    hotkeyBindings?.toggleFeedback;
+  const activationBinding = activationOverride === false
+    ? null
+    : {
       ...DEFAULT_ACTIVATION_KEYBINDING,
-      ...activationKeybinding,
+      ...activationOverride,
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (matchesActivationKeybinding(event, binding)) {
-        event.preventDefault();
-        toggle();
+  useScratchHotkey(
+    hotkeys as ScratchHotkeys | undefined,
+    activationBinding
+      ? {
+        id: 'toggleFeedback',
+        binding: activationBinding,
+        title: 'Toggle feedback',
+        description: 'Open or close the Scratch feedback toolbar',
+        group: 'Feedback',
+        enabled: !isDevelopment,
+        ignoreInputs: false,
+        preventDefault: true,
+        run: toggle,
       }
-    };
+      : null,
+  );
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDevelopment, activationKeybinding, toggle]);
+  useEffect(() => {
+    onModeChange?.(
+      active ? (annotating ? 'annotating' : 'ready') : 'hidden',
+    );
+  }, [active, annotating, onModeChange]);
 
   useEffect(() => {
     if (!active || isDevelopment) {
@@ -217,8 +204,11 @@ export function ScratchFeedback({
     <>
       <Scratch
         {...scratchProps}
+        hotkeys={hotkeys}
+        hotkeyBindings={hotkeyBindings}
         primaryColor={primaryColor}
         startActive
+        onAnnotationModeChange={setAnnotating}
         onRequestClose={dismiss}
         onActivity={bumpActivity}
         onIdleBlockedChange={setIdleBlocked}
