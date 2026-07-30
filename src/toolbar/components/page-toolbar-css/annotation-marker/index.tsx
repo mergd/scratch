@@ -22,12 +22,18 @@ type AnnotationMarkerProps = {
   isEditingAny: boolean;
   renumberFrom: number | null;
   markerClickBehavior: MarkerClickBehavior;
+  /** Current window.scrollY — converts document Y to viewport Y for non-fixed markers. */
+  scrollY?: number;
   tooltipStyle?: React.CSSProperties;
   onHoverEnter: (annotation: Annotation) => void;
   onHoverLeave: () => void;
   onClick: (annotation: Annotation) => void;
   onContextMenu?: (annotation: Annotation) => void;
 };
+
+function markerTop(annotation: Annotation, scrollY: number): number {
+  return annotation.isFixed ? annotation.y : annotation.y - scrollY;
+}
 
 export function AnnotationMarker({
   annotation,
@@ -42,6 +48,7 @@ export function AnnotationMarker({
   isEditingAny,
   renumberFrom,
   markerClickBehavior,
+  scrollY = 0,
   tooltipStyle,
   onHoverEnter,
   onHoverLeave,
@@ -74,7 +81,7 @@ export function AnnotationMarker({
       data-annotation-marker
       style={{
         left: `${annotation.x}%`,
-        top: annotation.y,
+        top: markerTop(annotation, scrollY),
         backgroundColor: showDeleteHover ? undefined : markerColor,
         animationDelay,
       }}
@@ -171,9 +178,14 @@ export function PendingMarker({
 type ExitingMarkerProps = {
   annotation: Annotation;
   fixed?: boolean;
+  scrollY?: number;
 };
 
-export function ExitingMarker({ annotation, fixed }: ExitingMarkerProps) {
+export function ExitingMarker({
+  annotation,
+  fixed,
+  scrollY = 0,
+}: ExitingMarkerProps) {
   const isMulti = annotation.isMultiSelect;
   return (
     <div
@@ -181,7 +193,7 @@ export function ExitingMarker({ annotation, fixed }: ExitingMarkerProps) {
       data-annotation-marker
       style={{
         left: `${annotation.x}%`,
-        top: annotation.y,
+        top: markerTop(annotation, scrollY),
       }}
     >
       <IconXmark size={isMulti ? 12 : 10} />

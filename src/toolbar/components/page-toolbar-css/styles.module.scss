@@ -1034,11 +1034,13 @@
 // =============================================================================
 
 .markersLayer {
-  position: absolute;
+  // Viewport-anchored (same as fixedMarkersLayer). Marker Y is converted with
+  // scrollY so document-absolute coords stay under the click point while scrolling.
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 0;
+  bottom: 0;
   z-index: 99998;
   pointer-events: none;
 

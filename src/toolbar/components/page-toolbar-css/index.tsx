@@ -3114,12 +3114,13 @@ export function PageFeedbackToolbarCSS({
     const markerSize = 22;
     const gap = 10;
 
-    // Convert percentage-based x to pixels
+    // Convert percentage-based x to pixels; Y is document-absolute unless fixed
     const markerX = (annotation.x / 100) * window.innerWidth;
-    const markerY =
+    const rawY =
       typeof annotation.y === "string"
         ? parseFloat(annotation.y)
         : annotation.y;
+    const markerY = annotation.isFixed ? rawY : rawY - scrollY;
 
     const styles: React.CSSProperties = {};
 
@@ -3430,6 +3431,7 @@ export function PageFeedbackToolbarCSS({
                   isEditingAny={!!editingAnnotation}
                   renumberFrom={renumberFrom}
                   markerClickBehavior={settings.markerClickBehavior}
+                  scrollY={scrollY}
                   tooltipStyle={getTooltipPosition(annotation)}
                   onHoverEnter={(a) =>
                     !markersExiting &&
@@ -3449,7 +3451,9 @@ export function PageFeedbackToolbarCSS({
             !markersExiting &&
             exitingAnnotationsList
               .filter((a) => !a.isFixed)
-              .map((a) => <ExitingMarker key={a.id} annotation={a} />)}
+              .map((a) => (
+                <ExitingMarker key={a.id} annotation={a} scrollY={scrollY} />
+              ))}
         </div>
 
         {/* Fixed markers layer */}
@@ -3476,6 +3480,7 @@ export function PageFeedbackToolbarCSS({
                   isEditingAny={!!editingAnnotation}
                   renumberFrom={renumberFrom}
                   markerClickBehavior={settings.markerClickBehavior}
+                  scrollY={scrollY}
                   tooltipStyle={getTooltipPosition(annotation)}
                   onHoverEnter={(a) =>
                     !markersExiting &&
@@ -3495,7 +3500,14 @@ export function PageFeedbackToolbarCSS({
             !markersExiting &&
             exitingAnnotationsList
               .filter((a) => a.isFixed)
-              .map((a) => <ExitingMarker key={a.id} annotation={a} fixed />)}
+              .map((a) => (
+                <ExitingMarker
+                  key={a.id}
+                  annotation={a}
+                  fixed
+                  scrollY={scrollY}
+                />
+              ))}
         </div>
 
         {/* Interactive overlay */}

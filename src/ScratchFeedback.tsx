@@ -93,7 +93,8 @@ export type ScratchFeedbackProps = ComponentProps<typeof Scratch> & {
 
 /**
  * Feedback toolbar. Always-on when `isDevelopment` is true;
- * otherwise hidden until the user draws three circles with their cursor
+ * on first visit (guide cookie unset) also starts unlocked with the intro guide.
+ * Otherwise hidden until the user draws three circles with their cursor
  * or presses the activation keybinding (default Cmd/Ctrl+Shift+U).
  *
  * On unlock, shows a short guide once (persisted in a cookie after any dismiss).
@@ -106,10 +107,12 @@ export function ScratchFeedback({
   primaryColor,
   ...scratchProps
 }: ScratchFeedbackProps) {
-  const [active, setActive] = useState(isDevelopment);
-  const [guideOpen, setGuideOpen] = useState(
-    () => isDevelopment && shouldShowFeedbackGuide(),
+  // First visit: show toolbar + guide immediately so feedback mode is obvious.
+  // After the guide cookie is set, production stays locked until circles / shortcut.
+  const [active, setActive] = useState(
+    () => isDevelopment || shouldShowFeedbackGuide(),
   );
+  const [guideOpen, setGuideOpen] = useState(() => shouldShowFeedbackGuide());
   const [idleBlocked, setIdleBlocked] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

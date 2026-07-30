@@ -1,6 +1,6 @@
 {
   "name": "@fldr/scratch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "User feedback toolbar for apps — mark what's confusing, unlock with three circles or Cmd/Ctrl+Shift+U",
   "type": "module",
   "license": "MIT",

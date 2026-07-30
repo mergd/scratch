@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Annotation } from "../../../types";
-import { IconClose, IconSendArrow, IconXmark } from "../../icons";
+import {
+  IconCheckmarkCircle,
+  IconClose,
+  IconSendArrow,
+  IconXmark,
+} from "../../icons";
 import styles from "./styles.module.scss";
 
 export type FeedbackMailPayload = {
@@ -104,139 +109,150 @@ export function MailPreview({
       }
     >
       <div
-        className={`${styles.mailPreview} ${isVisible ? styles.enter : styles.exit} ${showingThanks ? styles.mailPreviewThanks : ""}`}
+        className={`${styles.mailPreview} ${isVisible ? styles.enter : styles.exit}`}
         data-scratch-mail-preview
         role="dialog"
-        aria-label="Send feedback"
+        aria-label={showingThanks ? "Feedback sent" : "Send feedback"}
       >
-        <div className={styles.header}>
-          <div className={styles.titleRow}>
-            <span className={styles.titleIcon} aria-hidden>
-              <IconSendArrow size={12} state="idle" />
-            </span>
-            <span className={styles.title}>Send feedback</span>
-          </div>
-          <button
-            type="button"
-            className={styles.closeButton}
-            onClick={onClose}
-            aria-label="Close"
-            disabled={showingThanks}
-          >
-            <IconClose size={12} />
-          </button>
-        </div>
-
-        <div className={styles.body}>
-          {!hasDestination ? (
-            <p className={styles.empty}>
-              No feedback destination configured. Pass{" "}
-              <code>feedbackUrl</code>, <code>webhookUrl</code>, or{" "}
-              <code>mailto</code> to enable sending.
-            </p>
-          ) : (
-            <>
-              {hasAnnotations ? (
-                <ul className={styles.list}>
-                  {annotations.map((annotation, index) => (
-                    <li
-                      key={annotation.id}
-                      className={styles.item}
-                      onMouseEnter={() => onAnnotationHover(annotation)}
-                      onMouseLeave={() => onAnnotationHover(null)}
-                    >
-                      <span className={styles.itemIndex}>{index + 1}</span>
-                      <div className={styles.itemBody}>
-                        <span className={styles.itemLabel}>
-                          {annotation.element}
-                        </span>
-                        <span className={styles.itemComment}>
-                          {annotation.comment}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className={styles.removeButton}
-                        onClick={() => onRemoveAnnotation(annotation.id)}
-                        aria-label={`Remove annotation ${index + 1}`}
-                        disabled={showingThanks}
-                      >
-                        <IconXmark size={12} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : !hasMessage ? (
-                <p className={styles.empty}>
-                  Click the page to add annotations.
-                </p>
-              ) : null}
-
-              <div className={styles.messageField}>
-                <label
-                  className={styles.messageLabel}
-                  htmlFor="scratch-feedback-message"
-                >
-                  Anything else?
-                </label>
-                <textarea
-                  id="scratch-feedback-message"
-                  className={styles.messageInput}
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder="Optional overall notes…"
-                  rows={2}
-                  disabled={showingThanks}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" &&
-                      (event.metaKey || event.ctrlKey)
-                    ) {
-                      event.preventDefault();
-                      void handleSend();
-                    }
-                  }}
-                />
+        <div
+          className={`${styles.stage} ${showingThanks ? styles.stageSent : ""}`}
+        >
+          <div className={styles.formPane}>
+            <div className={styles.header}>
+              <div className={styles.titleRow}>
+                <span className={styles.titleIcon} aria-hidden>
+                  <IconSendArrow size={12} state="idle" />
+                </span>
+                <span className={styles.title}>Send feedback</span>
               </div>
-            </>
-          )}
-        </div>
-
-        {hasDestination && (
-          <div className={styles.footer}>
-            {status === "error" && (
-              <p className={styles.errorText}>
-                Couldn&apos;t send. Check the endpoint and try again.
-              </p>
-            )}
-            <div className={styles.actions}>
               <button
                 type="button"
-                className={styles.secondaryButton}
+                className={styles.closeButton}
                 onClick={onClose}
-                disabled={status === "sending" || showingThanks}
+                aria-label="Close"
+                disabled={showingThanks}
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={`${styles.primaryButton} ${status === "error" ? styles.primaryError : ""}`}
-                onClick={() => void handleSend()}
-                disabled={!canSend || status === "sending" || showingThanks}
-              >
-                {sendLabel}
+                <IconClose size={12} />
               </button>
             </div>
-          </div>
-        )}
-      </div>
 
-      <div
-        className={`${styles.thanksAside} ${showingThanks ? styles.thanksAsideVisible : ""}`}
-        aria-live="polite"
-        aria-hidden={!showingThanks}
-      >
-        <span className={styles.thanksText}>Thanks</span>
+            <div className={styles.body}>
+              {!hasDestination ? (
+                <p className={styles.empty}>
+                  No feedback destination configured. Pass{" "}
+                  <code>feedbackUrl</code>, <code>webhookUrl</code>, or{" "}
+                  <code>mailto</code> to enable sending.
+                </p>
+              ) : (
+                <>
+                  {hasAnnotations ? (
+                    <ul className={styles.list}>
+                      {annotations.map((annotation, index) => (
+                        <li
+                          key={annotation.id}
+                          className={styles.item}
+                          onMouseEnter={() => onAnnotationHover(annotation)}
+                          onMouseLeave={() => onAnnotationHover(null)}
+                        >
+                          <span className={styles.itemIndex}>{index + 1}</span>
+                          <div className={styles.itemBody}>
+                            <span className={styles.itemLabel}>
+                              {annotation.element}
+                            </span>
+                            <span className={styles.itemComment}>
+                              {annotation.comment}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.removeButton}
+                            onClick={() => onRemoveAnnotation(annotation.id)}
+                            aria-label={`Remove annotation ${index + 1}`}
+                            disabled={showingThanks}
+                          >
+                            <IconXmark size={12} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : !hasMessage ? (
+                    <p className={styles.empty}>
+                      Click the page to add annotations.
+                    </p>
+                  ) : null}
+
+                  <div className={styles.messageField}>
+                    <label
+                      className={styles.messageLabel}
+                      htmlFor="scratch-feedback-message"
+                    >
+                      Anything else?
+                    </label>
+                    <textarea
+                      id="scratch-feedback-message"
+                      className={styles.messageInput}
+                      value={message}
+                      onChange={(event) => setMessage(event.target.value)}
+                      placeholder="Optional overall notes…"
+                      rows={2}
+                      disabled={showingThanks}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Enter" &&
+                          (event.metaKey || event.ctrlKey)
+                        ) {
+                          event.preventDefault();
+                          void handleSend();
+                        }
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {hasDestination && (
+              <div className={styles.footer}>
+                {status === "error" && (
+                  <p className={styles.errorText}>
+                    Couldn&apos;t send. Check the endpoint and try again.
+                  </p>
+                )}
+                <div className={styles.actions}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={onClose}
+                    disabled={status === "sending" || showingThanks}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.primaryButton} ${status === "error" ? styles.primaryError : ""}`}
+                    onClick={() => void handleSend()}
+                    disabled={!canSend || status === "sending" || showingThanks}
+                  >
+                    {sendLabel}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            className={styles.successPane}
+            aria-live="polite"
+            aria-hidden={!showingThanks}
+          >
+            <div className={styles.successContent}>
+              <span className={styles.successIcon} aria-hidden>
+                <IconCheckmarkCircle size={36} />
+              </span>
+              <span className={styles.successText}>Thanks</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
