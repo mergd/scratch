@@ -25,8 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          # Do not set registry-url here — it injects a dummy NODE_AUTH_TOKEN
-          # that blocks OIDC trusted publishing.
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - name: Ensure npm supports OIDC trusted publishing
         run: npm install -g npm@latest
@@ -42,7 +42,7 @@ jobs:
         run: bun run build
 
       - name: Publish
-        # No NODE_AUTH_TOKEN — npm uses GitHub OIDC via trusted publishing.
-        env:
-          NODE_AUTH_TOKEN: ""
+        # Auth via GitHub OIDC trusted publishing — no NPM_TOKEN secret.
+        # Configure on https://www.npmjs.com/package/@fldr/scratch → Settings
+        # → Trusted Publisher: mergd / scratch / publish.yml
         run: npm publish --access public
