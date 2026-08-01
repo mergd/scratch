@@ -1,7 +1,7 @@
 {
   "name": "@fldr/scratch",
-  "version": "0.1.1",
-  "description": "User feedback toolbar for apps — mark what's confusing, unlock with three circles or Cmd/Ctrl+Shift+U",
+  "version": "0.1.2",
+  "description": "User feedback toolbar for apps \u2014 mark what's confusing, unlock with three circles or Cmd/Ctrl+Shift+U",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,8 @@
   },
   "files": [
     "dist",
+    "proxy",
+    "skills",
     "README.md",
     "NOTICE",
     "UPSTREAM_LICENSE"
@@ -33,6 +35,7 @@
     "demo": "vite --config demo/vite.config.ts",
     "demo:build": "vite build --config demo/vite.config.ts",
     "deploy": "bun run demo:build && wrangler deploy",
+    "deploy:proxy": "wrangler deploy --config proxy/wrangler.toml",
     "prepack": "bun run build",
     "test": "vitest run --passWithNoTests"
   },

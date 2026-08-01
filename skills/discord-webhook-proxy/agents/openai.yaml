@@ -1,0 +1,4 @@
+interface:
+  display_name: "Discord Webhook Proxy"
+  short_description: "Provision and use a safe Discord feedback webhook proxy."
+  default_prompt: "Set up or use the Discord webhook proxy for Scratch feedback."

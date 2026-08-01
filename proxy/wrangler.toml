@@ -1,0 +1,34 @@
+name = "scratch-feedback-proxy"
+main = "index.ts"
+compatibility_date = "2025-07-12"
+workers_dev = false
+account_id = "24d3bab86b3b44170195747d8f330d4e"
+
+[[routes]]
+pattern = "feedbackproxy.yet-to-be.com"
+custom_domain = true
+
+# Create a dedicated namespace with `wrangler kv namespace create WEBHOOKS`,
+# then replace this placeholder ID before deploying.
+[[kv_namespaces]]
+binding = "WEBHOOKS"
+id = "REPLACE_WITH_WEBHOOKS_NAMESPACE_ID"
+
+# Pick unique positive integers in this Cloudflare account. These limits are
+# per Cloudflare location; add a zone-level WAF rate-limit rule for a stricter
+# global ceiling before announcing the service.
+[[ratelimits]]
+name = "REGISTRATION_LIMIT"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "DELIVERY_LIMIT"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60

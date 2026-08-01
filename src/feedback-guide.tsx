@@ -166,32 +166,7 @@ export function FeedbackGuide({
               {dismissFeedbackLabel}
             </button>
           </div>
-          <div className={styles.arrow} aria-hidden="true">
-            <svg
-              className={styles.arrowBorder}
-              width="20"
-              height="18"
-              viewBox="0 0 20 18"
-              fill="none"
-            >
-              <path
-                d="M2 0.5h16c1.1 0 2 .9 2 2v8.8c0 1.6-1.7 2.2-2.7 1.3l-4.8-3.8c-.6-.5-1.4-.5-2 0l-4.8 3.8c-1 0.9-2.7 0.3-2.7-1.3V2.5c0-1.1.9-2 2-2z"
-                fill="currentColor"
-              />
-            </svg>
-            <svg
-              className={styles.arrowFill}
-              width="20"
-              height="18"
-              viewBox="0 0 20 18"
-              fill="none"
-            >
-              <path
-                d="M3 1h14c.6 0 1 .4 1 1v7.6c0 1.1-1.4 1.5-2.1 0.8l-4.5-3.6c-.7-.6-1.7-.6-2.4 0l-4.5 3.6c-.7 0.7-2.1 0.3-2.1-0.8V2c0-.6.4-1 1-1z"
-                fill="currentColor"
-              />
-            </svg>
-          </div>
+          <div className={styles.arrow} aria-hidden="true" />
         </div>
       </div>
     </ShadowRoot>,
