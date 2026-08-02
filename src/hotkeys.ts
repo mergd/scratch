@@ -117,11 +117,39 @@ function matchesBinding(
     event.altKey === (binding.alt ?? false);
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.tagName === "INPUT" ||
-    target.tagName === "TEXTAREA" ||
-    target.isContentEditable;
+function isEditableElement(node: EventTarget | null): boolean {
+  if (!(node instanceof HTMLElement)) return false;
+  if (node.isContentEditable) return true;
+  const tag = node.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+/** Walk into open shadow roots to find the real focused element. */
+function deepestActiveElement(): Element | null {
+  let el: Element | null = document.activeElement;
+  while (el instanceof HTMLElement && el.shadowRoot?.activeElement) {
+    el = el.shadowRoot.activeElement;
+  }
+  return el;
+}
+
+/**
+ * True when the user is typing in an editable field.
+ * Must use composedPath / deep activeElement because Scratch UI lives in
+ * shadow DOM — window listeners otherwise see only the host element.
+ */
+function isTypingContext(event: KeyboardEvent): boolean {
+  if (isEditableElement(deepestActiveElement())) {
+    return true;
+  }
+
+  for (const node of event.composedPath()) {
+    if (isEditableElement(node)) {
+      return true;
+    }
+  }
+
+  return isEditableElement(event.target);
 }
 
 export function useScratchHotkey(
@@ -147,10 +175,7 @@ export function useScratchHotkey(
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!registration.enabled) return;
-      if (
-        registration.ignoreInputs &&
-        isTypingTarget(event.target)
-      ) {
+      if (registration.ignoreInputs && isTypingContext(event)) {
         return;
       }
       if (!matchesBinding(event, registration.binding)) return;

@@ -774,16 +774,15 @@ export function PageFeedbackToolbarCSS({
   const shouldShowMarkers = isActive && showMarkers;
   useEffect(() => {
     if (shouldShowMarkers) {
-      // Show markers - reset animations and make visible
       setMarkersExiting(false);
       setMarkersVisible(true);
-      setAnimatedMarkers(new Set());
-      // After enter animations complete, mark all as animated
+      // Don't reset animatedMarkers — replaying enter on every show looks like
+      // markers "drifting". New annotation ids still animate via !isAnimated.
       const timer = originalSetTimeout(() => {
         setAnimatedMarkers((prev) => {
-          const newSet = new Set(prev);
-          annotations.forEach((a) => newSet.add(a.id));
-          return newSet;
+          const next = new Set(prev);
+          annotations.forEach((a) => next.add(a.id));
+          return next;
         });
       }, 350);
       return () => clearTimeout(timer);
