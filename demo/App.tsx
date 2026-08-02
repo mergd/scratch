@@ -20,7 +20,7 @@ const DEFAULT_CONFIG: PlaygroundConfig = {
   primaryColor: 'blue',
   enableCopy: true,
   enableMailFeedback: true,
-  isDevelopment: false,
+  isDevelopment: true,
   feedbackUrl: '/api/feedback',
   mailto: '',
   webhookUrl: '',
@@ -120,9 +120,9 @@ export function App() {
         <p className="eyebrow">@fldr/scratch</p>
         <h1>Playground</h1>
         <p className="lede">
-          Unlock feedback with three circles on the page or{' '}
-          <kbd>⌘/Ctrl+Shift+U</kbd>. Enable &ldquo;Always on (dev)&rdquo; to
-          skip unlock. Tweak props below, annotate, then send.
+          Always-on (dev) is enabled by default so the toolbar is visible.
+          Turn it off to try unlock with three circles or{' '}
+          <kbd>⌘/Ctrl+Shift+U</kbd>. Tweak props below, annotate, then send.
         </p>
 
         <section className="config-section">
